@@ -3,7 +3,7 @@ import express from 'express';
 import session from 'express-session';
 import cron from 'node-cron';
 import { loadCommands } from './handlers/commandLoader.js';
-import { loadInteractions } from './handlers/interactions.js';
+import loadInteractions from './handlers/interactions.js';
 import loadEvents from './handlers/events.js';
 import { registerCommands as registerSlashCommands } from './handlers/commandLoader.js';
 import { initializeDatabase } from './utils/database.js';
@@ -102,7 +102,6 @@ export class TitanBot extends Client {
     app.use((req, res) => res.status(404).json({ error: `Route not found: ${req.url}` }));
 
     const PORT = process.env.PORT || 3000;
-
     app.listen(PORT, '0.0.0.0', () => {
       startupLog(`Web server listening on port ${PORT}`);
     });
@@ -111,15 +110,12 @@ export class TitanBot extends Client {
   setupCronJobs() {
     cron.schedule('0 6 * * *', () => checkBirthdays(this));
     cron.schedule('* * * * *', () => checkGiveaways(this));
-
     logger.debug('Cron jobs scheduled (birthdays, giveaways)');
   }
 
   async registerCommands() {
     // Wolf is a multi-server bot. Register slash commands globally so every
-    // guild the bot is installed in receives the same command set. GUILD_ID
-    // is intentionally not used for registration; guild-specific deployment
-    // is useful for development but would hide commands from other servers.
+    // guild the bot is installed in receives the same command set.
     await registerSlashCommands(this, null);
   }
 }

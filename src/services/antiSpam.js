@@ -10,6 +10,7 @@ const DEFAULTS = {
   windowMs: 5000,
   duplicateThreshold: 3,
   timeoutMs: 60000,
+  timeout: true,
   deleteMessages: true,
   ignoredChannels: [],
   ignoredRoles: [],
@@ -29,6 +30,7 @@ function normalizeConfig(config) {
     windowMs: Math.max(1000, Math.min(60000, Number(value.windowMs) || DEFAULTS.windowMs)),
     duplicateThreshold: Math.max(2, Math.min(20, Number(value.duplicateThreshold) || DEFAULTS.duplicateThreshold)),
     timeoutMs: Math.max(5000, Math.min(28 * 24 * 60 * 60 * 1000, Number(value.timeoutMs) || DEFAULTS.timeoutMs)),
+    timeout: value.timeout !== false,
     ignoredChannels: Array.isArray(value.ignoredChannels) ? value.ignoredChannels : [],
     ignoredRoles: Array.isArray(value.ignoredRoles) ? value.ignoredRoles : [],
   };
@@ -84,6 +86,8 @@ export async function processAntiSpam(message, client) {
       logger.warn(`Anti-Spam could not delete message in guild ${message.guild.id}: ${error?.message || error}`);
     });
   }
+
+  if (!config.timeout) return true;
 
   const botMember = message.guild.members.me;
   const canModerate = botMember?.permissions.has(PermissionFlagsBits.ModerateMembers) && message.member.moderatable;

@@ -19,11 +19,8 @@ function translateObject(value, seen = new WeakSet()) {
   if (seen.has(value)) return value;
   seen.add(value);
   if (Array.isArray(value)) return value.map(item => translateObject(item, seen));
-
   const out = {};
-  for (const [key, child] of Object.entries(value)) {
-    out[key] = translateObject(child, seen);
-  }
+  for (const [key, child] of Object.entries(value)) out[key] = translateObject(child, seen);
   return out;
 }
 
@@ -32,24 +29,19 @@ function patch(klass, method) {
   if (typeof original !== 'function') return;
   const marker = `__wolfSpanishFix_${method}`;
   if (klass.prototype[marker]) return;
-
   klass.prototype[method] = function patched(value, ...args) {
     return original.call(this, translateObject(value), ...args);
   };
   Object.defineProperty(klass.prototype, marker, { value: true, enumerable: false });
 }
 
-for (const Klass of [
-  CommandInteraction,
-  ModalSubmitInteraction,
-  ButtonInteraction,
-  StringSelectMenuInteraction,
-]) {
+for (const Klass of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction]) {
   patch(Klass, 'reply');
   patch(Klass, 'editReply');
   patch(Klass, 'followUp');
   patch(Klass, 'update');
-  patch(Klass, 'showModal');
+  // NEVER patch showModal: Discord modal component payloads require their
+  // component type discriminator and must be sent using the original builder.
 }
 
 patch(BaseGuildTextChannel, 'send');

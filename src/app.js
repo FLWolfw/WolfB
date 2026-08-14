@@ -4,7 +4,7 @@ import session from 'express-session';
 import cron from 'node-cron';
 import { loadCommands } from './handlers/commandLoader.js';
 import { loadInteractions } from './handlers/interactions.js';
-import { loadEvents } from './handlers/eventLoader.js';
+import loadEvents from './handlers/events.js';
 import { registerCommands as registerSlashCommands } from './handlers/commandLoader.js';
 import { createDatabase } from './utils/database.js';
 import { logger, startupLog, shutdownLog } from './utils/logger.js';

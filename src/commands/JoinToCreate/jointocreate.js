@@ -74,6 +74,7 @@ export default {
                             { name: "{username}'s Space", value: "{username}'s Space" },
                             { name: "{displayName}'s Room", value: "{displayName}'s Room" },
                             { name: "{username}'s VC", value: "{username}'s VC" },
+                            { name: "🎵 {username}'s Music Room", value: "🎵 {username}'s Music Room" },
                             { name: "🎮 {username}'s Gaming Room", value: "🎮 {username}'s Gaming Room" },
                             { name: "💬 {username}'s Chat Room", value: "💬 {username}'s Chat Room" },
                             { name: "{username}'s Private Room", value: "{username}'s Private Room" }
@@ -372,266 +373,351 @@ async function handleConfigSubcommand(interaction, client, lang) {
                     await handleChannelDeletion(buttonInteraction, triggerChannel, currentConfig, client, lang);
                 }
             } catch (error) {
-                logger.error('JTC configuration interaction error:', error);
-                try {
-                    if (!buttonInteraction.replied && !buttonInteraction.deferred) {
-                        await buttonInteraction.reply({
-                            content: t(lang, 'wolf.cmd.jtc.configInteractionError'),
-                            flags: MessageFlags.Ephemeral
-                        });
-                    } else {
-                        await buttonInteraction.followUp({
-                            content: t(lang, 'wolf.cmd.jtc.configInteractionError'),
-                            flags: MessageFlags.Ephemeral
-                        });
-                    }
-                } catch (replyError) {
-                    logger.error('Failed to send JTC config interaction error:', replyError);
+                const userMessage = error instanceof TitanBotError
+                    ? error.userMessage || t(lang, 'wolf.cmd.jtc.modalError')
+                    : t(lang, 'wolf.cmd.jtc.deleteError');
+
+                if (error instanceof TitanBotError) {
+                    logger.debug(`Button interaction validation error: ${error.message}`, error.context || {});
+                } else {
+                    logger.error('Unexpected error in config button interaction:', error);
                 }
+
+                await buttonInteraction.reply({
+                    content: `❌ ${userMessage}`,
+                    flags: MessageFlags.Ephemeral
+                }).catch(() => {});
             }
         });
 
-        collector.on('end', async () => {
-            try {
-                const disabledRow = new ActionRowBuilder().addComponents(
-                    nameButton.setDisabled(true),
-                    limitButton.setDisabled(true),
-                    bitrateButton.setDisabled(true),
-                    deleteButton.setDisabled(true)
-                );
-                await InteractionHelper.safeEditReply(interaction, { components: [disabledRow] });
-            } catch (error) {
-                logger.debug('JTC collector cleanup skipped', { error: error?.message });
-            }
+        collector.on('end', () => {
+            const disabledRow = new ActionRowBuilder().addComponents(
+                nameButton.setDisabled(true),
+                limitButton.setDisabled(true),
+                bitrateButton.setDisabled(true),
+                deleteButton.setDisabled(true)
+            );
+
+            message.edit({
+                components: [disabledRow],
+                embeds: [configEmbed.setFooter({ text: t(lang, 'wolf.cmd.jtc.configExpiredFooter') })]
+            }).catch(() => {});
         });
 
     } catch (error) {
-        logger.error('Error in handleConfigSubcommand:', error);
         if (error instanceof TitanBotError) throw error;
         throw new TitanBotError(
-            `Dashboard configuration failed: ${error.message}`,
-            ErrorTypes.DISCORD_API,
-            t(lang, 'wolf.cmd.jtc.configFailed')
+            `Config failed: ${error.message}`,
+            ErrorTypes.DATABASE,
+            t(lang, 'wolf.cmd.jtc.configLoadFailed')
         );
     }
 }
 
 async function handleNameTemplateModal(interaction, triggerChannel, currentConfig, client, lang) {
-    const modal = new ModalBuilder()
-        .setCustomId(`jtc_name_modal_${triggerChannel.id}`)
-        .setTitle(t(lang, 'wolf.cmd.jtc.nameModalTitle'));
-
-    const nameInput = new TextInputBuilder()
-        .setCustomId('name_template')
-        .setLabel(t(lang, 'wolf.cmd.jtc.nameTemplateLabel'))
-        .setStyle(TextInputStyle.Short)
-        .setValue(currentConfig.channelNameTemplate || "{username}'s Room")
-        .setPlaceholder("{username}'s Room")
-        .setRequired(true)
-        .setMaxLength(100);
-
-    const row = new ActionRowBuilder().addComponents(nameInput);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
-
-    const modalSubmit = await interaction.awaitModalSubmit({
-        filter: (i) => i.customId === `jtc_name_modal_${triggerChannel.id}` && i.user.id === interaction.user.id,
-        time: 60000
-    }).catch(() => null);
-
-    if (!modalSubmit) return;
-
     try {
-        await modalSubmit.deferUpdate();
-        const newNameTemplate = modalSubmit.fields.getTextInputValue('name_template');
-        if (!newNameTemplate || newNameTemplate.trim().length === 0) {
-            throw new TitanBotError(
-                'Invalid name template',
-                ErrorTypes.VALIDATION,
-                t(lang, 'wolf.cmd.jtc.invalidNameTemplate')
-            );
+        const TEMPLATE_OPTIONS = [
+            { label: "{username}'s Room (Default)", value: "{username}'s Room" },
+            { label: "{username}'s Channel", value: "{username}'s Channel" },
+            { label: "{username}'s Lounge", value: "{username}'s Lounge" },
+            { label: "{username}'s Space", value: "{username}'s Space" },
+            { label: "{displayName}'s Room", value: "{displayName}'s Room" },
+            { label: "{username}'s VC", value: "{username}'s VC" },
+            { label: "🎵 {username}'s Music Room", value: "🎵 {username}'s Music Room" },
+            { label: "🎮 {username}'s Gaming Room", value: "🎮 {username}'s Gaming Room" },
+            { label: "💬 {username}'s Chat Room", value: "💬 {username}'s Chat Room" },
+            { label: "{username}'s Private Room", value: "{username}'s Private Room" },
+        ];
+
+        const currentTemplate = currentConfig.channelConfig?.nameTemplate || currentConfig.channelNameTemplate || "{username}'s Room";
+
+        const templateSelect = new StringSelectMenuBuilder()
+            .setCustomId('template')
+            .setPlaceholder(t(lang, 'wolf.cmd.jtc.modalNamePlaceholder'))
+            .setOptions(TEMPLATE_OPTIONS.map(o => ({ label: o.label, value: o.value, default: o.value === currentTemplate })));
+
+        const templateLabel = new LabelBuilder()
+            .setLabel(t(lang, 'wolf.cmd.jtc.modalNameLabel'))
+            .setStringSelectMenuComponent(templateSelect);
+
+        const modal = new ModalBuilder()
+            .setCustomId(`jtc_name_modal_${triggerChannel.id}`)
+            .setTitle(t(lang, 'wolf.cmd.jtc.modalNameTitle'))
+            .addLabelComponents(templateLabel);
+
+        await interaction.showModal(modal);
+
+        const modalSubmission = await interaction.awaitModalSubmit({
+            filter: (i) => i.customId === `jtc_name_modal_${triggerChannel.id}` && i.user.id === interaction.user.id,
+            time: 60000
+        });
+
+        if (!hasManageGuildPermission(modalSubmission.member)) {
+            await modalSubmission.reply({
+                content: t(lang, 'wolf.cmd.jtc.permDeniedModify'),
+                flags: MessageFlags.Ephemeral
+            });
+            return;
         }
 
-        await updateChannelConfig(client, interaction.guild.id, triggerChannel.id, {
-            nameTemplate: newNameTemplate.trim()
-        });
+        const [newTemplate] = modalSubmission.fields.getStringSelectValues('template');
+
+        await updateChannelConfig(client, interaction.guild.id, triggerChannel.id, { nameTemplate: newTemplate });
 
         await logConfigurationChange(client, interaction.guild.id, interaction.user.id, 'Updated channel name template', {
-            channelId: triggerChannel.id,
-            nameTemplate: newNameTemplate.trim()
+            channelId: triggerChannel.id, newTemplate
         });
 
-        await modalSubmit.editReply({
-            content: t(lang, 'wolf.cmd.jtc.nameUpdated'),
-            embeds: [],
-            components: []
+        await modalSubmission.reply({
+            embeds: [successEmbed(
+                t(lang, 'wolf.cmd.jtc.updateSuccess'),
+                t(lang, 'wolf.cmd.jtc.updateTemplate', { template: newTemplate })
+            )],
+            flags: MessageFlags.Ephemeral
         });
 
     } catch (error) {
-        logger.error('Error updating name template:', error);
-        const errorMsg = error instanceof TitanBotError ? error.userMessage : t(lang, 'wolf.cmd.jtc.updateFailed');
-        if (modalSubmit.deferred || modalSubmit.replied) {
-            await modalSubmit.editReply({ content: errorMsg, embeds: [], components: [] });
-        } else {
-            await modalSubmit.reply({ content: errorMsg, flags: MessageFlags.Ephemeral });
-        }
+        if (error.code === 'INTERACTION_COLLECTOR_ERROR') return;
+        if (error instanceof TitanBotError) throw error;
+        logger.error('Unexpected error in name template modal:', error);
+        throw new TitanBotError(
+            `Modal error: ${error.message}`,
+            ErrorTypes.UNKNOWN,
+            t(lang, 'wolf.cmd.jtc.modalErrorTemplate')
+        );
     }
 }
 
 async function handleUserLimitModal(interaction, triggerChannel, currentConfig, client, lang) {
-    const modal = new ModalBuilder()
-        .setCustomId(`jtc_limit_modal_${triggerChannel.id}`)
-        .setTitle(t(lang, 'wolf.cmd.jtc.limitModalTitle'));
-
-    const limitInput = new TextInputBuilder()
-        .setCustomId('user_limit')
-        .setLabel(t(lang, 'wolf.cmd.jtc.limitLabel'))
-        .setStyle(TextInputStyle.Short)
-        .setValue(String(currentConfig.userLimit || 0))
-        .setPlaceholder('0-99')
-        .setRequired(true)
-        .setMaxLength(2);
-
-    const row = new ActionRowBuilder().addComponents(limitInput);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
-
-    const modalSubmit = await interaction.awaitModalSubmit({
-        filter: (i) => i.customId === `jtc_limit_modal_${triggerChannel.id}` && i.user.id === interaction.user.id,
-        time: 60000
-    }).catch(() => null);
-
-    if (!modalSubmit) return;
-
     try {
-        await modalSubmit.deferUpdate();
-        const limitValue = parseInt(modalSubmit.fields.getTextInputValue('user_limit'), 10);
-        if (isNaN(limitValue) || limitValue < 0 || limitValue > 99) {
-            throw new TitanBotError(
-                'Invalid user limit',
-                ErrorTypes.VALIDATION,
-                t(lang, 'wolf.cmd.jtc.invalidLimit')
+        const currentLimit = currentConfig.channelConfig.userLimit ?? currentConfig.userLimit ?? 0;
+
+        const modal = new ModalBuilder()
+            .setCustomId(`jtc_limit_modal_${triggerChannel.id}`)
+            .setTitle(t(lang, 'wolf.cmd.jtc.modalLimitTitle'))
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('user_limit')
+                        .setLabel(t(lang, 'wolf.cmd.jtc.modalLimitLabel'))
+                        .setPlaceholder(t(lang, 'wolf.cmd.jtc.modalLimitPlaceholder'))
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMinLength(1)
+                        .setMaxLength(2)
+                        .setValue(currentLimit.toString())
+                )
             );
+
+        await interaction.showModal(modal);
+
+        const modalSubmission = await interaction.awaitModalSubmit({
+            filter: (i) => i.customId === `jtc_limit_modal_${triggerChannel.id}` && i.user.id === interaction.user.id,
+            time: 60000
+        });
+
+        if (!hasManageGuildPermission(modalSubmission.member)) {
+            await modalSubmission.reply({
+                content: t(lang, 'wolf.cmd.jtc.permDeniedModify'),
+                flags: MessageFlags.Ephemeral
+            });
+            return;
         }
 
-        await updateChannelConfig(client, interaction.guild.id, triggerChannel.id, {
-            userLimit: limitValue
-        });
+        const userInput = modalSubmission.fields.getTextInputValue('user_limit').trim();
+        const parsedLimit = parseInt(userInput);
 
-        await triggerChannel.setUserLimit(limitValue);
+        await updateChannelConfig(client, interaction.guild.id, triggerChannel.id, { userLimit: parsedLimit });
 
         await logConfigurationChange(client, interaction.guild.id, interaction.user.id, 'Updated user limit', {
-            channelId: triggerChannel.id,
-            userLimit: limitValue
+            channelId: triggerChannel.id, userLimit: parsedLimit
         });
 
-        await modalSubmit.editReply({
-            content: t(lang, 'wolf.cmd.jtc.limitUpdated', { n: limitValue }),
-            embeds: [],
-            components: []
+        const limitStr = parsedLimit === 0
+            ? t(lang, 'wolf.cmd.jtc.unlimited')
+            : t(lang, 'wolf.cmd.jtc.usersSuffix', { n: parsedLimit });
+
+        await modalSubmission.reply({
+            embeds: [successEmbed(
+                t(lang, 'wolf.cmd.jtc.updateSuccess'),
+                t(lang, 'wolf.cmd.jtc.updateLimit', { value: limitStr })
+            )],
+            flags: MessageFlags.Ephemeral
         });
 
     } catch (error) {
-        logger.error('Error updating user limit:', error);
-        const errorMsg = error instanceof TitanBotError ? error.userMessage : t(lang, 'wolf.cmd.jtc.updateFailed');
-        if (modalSubmit.deferred || modalSubmit.replied) {
-            await modalSubmit.editReply({ content: errorMsg, embeds: [], components: [] });
-        } else {
-            await modalSubmit.reply({ content: errorMsg, flags: MessageFlags.Ephemeral });
-        }
+        if (error.code === 'INTERACTION_COLLECTOR_ERROR') return;
+        if (error instanceof TitanBotError) throw error;
+        logger.error('Unexpected error in user limit modal:', error);
+        throw new TitanBotError(
+            `Modal error: ${error.message}`,
+            ErrorTypes.UNKNOWN,
+            t(lang, 'wolf.cmd.jtc.modalErrorLimit')
+        );
     }
 }
 
 async function handleBitrateModal(interaction, triggerChannel, currentConfig, client, lang) {
-    const modal = new ModalBuilder()
-        .setCustomId(`jtc_bitrate_modal_${triggerChannel.id}`)
-        .setTitle(t(lang, 'wolf.cmd.jtc.bitrateModalTitle'));
-
-    const bitrateInput = new TextInputBuilder()
-        .setCustomId('bitrate')
-        .setLabel(t(lang, 'wolf.cmd.jtc.bitrateLabel'))
-        .setStyle(TextInputStyle.Short)
-        .setValue(String((currentConfig.bitrate || 64000) / 1000))
-        .setPlaceholder('8-96')
-        .setRequired(true)
-        .setMaxLength(2);
-
-    const row = new ActionRowBuilder().addComponents(bitrateInput);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
-
-    const modalSubmit = await interaction.awaitModalSubmit({
-        filter: (i) => i.customId === `jtc_bitrate_modal_${triggerChannel.id}` && i.user.id === interaction.user.id,
-        time: 60000
-    }).catch(() => null);
-
-    if (!modalSubmit) return;
-
     try {
-        await modalSubmit.deferUpdate();
-        const bitrateValue = parseInt(modalSubmit.fields.getTextInputValue('bitrate'), 10);
-        if (isNaN(bitrateValue) || bitrateValue < 8 || bitrateValue > 96) {
-            throw new TitanBotError(
-                'Invalid bitrate',
-                ErrorTypes.VALIDATION,
-                t(lang, 'wolf.cmd.jtc.invalidBitrate')
+        const currentBitrate = ((currentConfig.channelConfig.bitrate ?? currentConfig.bitrate ?? 64000) / 1000);
+
+        const modal = new ModalBuilder()
+            .setCustomId(`jtc_bitrate_modal_${triggerChannel.id}`)
+            .setTitle(t(lang, 'wolf.cmd.jtc.modalBitrateTitle'))
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('bitrate')
+                        .setLabel(t(lang, 'wolf.cmd.jtc.modalBitrateLabel'))
+                        .setPlaceholder(t(lang, 'wolf.cmd.jtc.modalBitratePlaceholder'))
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMinLength(1)
+                        .setMaxLength(3)
+                        .setValue(currentBitrate.toString())
+                )
             );
+
+        await interaction.showModal(modal);
+
+        const modalSubmission = await interaction.awaitModalSubmit({
+            filter: (i) => i.customId === `jtc_bitrate_modal_${triggerChannel.id}` && i.user.id === interaction.user.id,
+            time: 60000
+        });
+
+        if (!hasManageGuildPermission(modalSubmission.member)) {
+            await modalSubmission.reply({
+                content: t(lang, 'wolf.cmd.jtc.permDeniedModify'),
+                flags: MessageFlags.Ephemeral
+            });
+            return;
         }
 
-        await updateChannelConfig(client, interaction.guild.id, triggerChannel.id, {
-            bitrate: bitrateValue * 1000
-        });
+        const userInput = modalSubmission.fields.getTextInputValue('bitrate').trim();
+        const parsedBitrate = parseInt(userInput);
 
-        await triggerChannel.setBitrate(bitrateValue * 1000);
+        await updateChannelConfig(client, interaction.guild.id, triggerChannel.id, { bitrate: parsedBitrate * 1000 });
 
         await logConfigurationChange(client, interaction.guild.id, interaction.user.id, 'Updated bitrate', {
-            channelId: triggerChannel.id,
-            bitrate: bitrateValue
+            channelId: triggerChannel.id, bitrate: parsedBitrate
         });
 
-        await modalSubmit.editReply({
-            content: t(lang, 'wolf.cmd.jtc.bitrateUpdated', { n: bitrateValue }),
-            embeds: [],
-            components: []
+        await modalSubmission.reply({
+            embeds: [successEmbed(
+                t(lang, 'wolf.cmd.jtc.updateSuccess'),
+                t(lang, 'wolf.cmd.jtc.updateBitrate', { value: parsedBitrate })
+            )],
+            flags: MessageFlags.Ephemeral
         });
 
     } catch (error) {
-        logger.error('Error updating bitrate:', error);
-        const errorMsg = error instanceof TitanBotError ? error.userMessage : t(lang, 'wolf.cmd.jtc.updateFailed');
-        if (modalSubmit.deferred || modalSubmit.replied) {
-            await modalSubmit.editReply({ content: errorMsg, embeds: [], components: [] });
-        } else {
-            await modalSubmit.reply({ content: errorMsg, flags: MessageFlags.Ephemeral });
-        }
+        if (error.code === 'INTERACTION_COLLECTOR_ERROR') return;
+        if (error instanceof TitanBotError) throw error;
+        logger.error('Unexpected error in bitrate modal:', error);
+        throw new TitanBotError(
+            `Modal error: ${error.message}`,
+            ErrorTypes.UNKNOWN,
+            t(lang, 'wolf.cmd.jtc.modalErrorBitrate')
+        );
     }
 }
 
 async function handleChannelDeletion(interaction, triggerChannel, currentConfig, client, lang) {
     try {
-        await interaction.deferUpdate();
-        await triggerChannel.delete('Join to Create system removed by admin');
-        await removeTriggerChannel(client, interaction.guild.id, triggerChannel.id);
+        const confirmRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`jtc_delete_confirm_${triggerChannel.id}`)
+                .setLabel(t(lang, 'wolf.cmd.jtc.deleteYesBtn'))
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId(`jtc_delete_cancel_${triggerChannel.id}`)
+                .setLabel(t(lang, 'wolf.cmd.jtc.deleteCancelBtn'))
+                .setStyle(ButtonStyle.Secondary)
+        );
 
-        await logConfigurationChange(client, interaction.guild.id, interaction.user.id, 'Removed Join to Create system', {
-            channelId: triggerChannel.id
+        await InteractionHelper.safeReply(interaction, {
+            embeds: [errorEmbed(
+                t(lang, 'wolf.cmd.jtc.deleteConfirmTitle'),
+                t(lang, 'wolf.cmd.jtc.deleteConfirmDesc', { name: triggerChannel.name })
+            )],
+            components: [confirmRow],
+            flags: MessageFlags.Ephemeral
         });
 
-        await interaction.editReply({
-            content: t(lang, 'wolf.cmd.jtc.channelRemoved'),
-            embeds: [],
-            components: []
+        const message = await interaction.fetchReply();
+        const deleteCollector = message.createMessageComponentCollector({
+            componentType: ComponentType.Button,
+            filter: (i) => i.user.id === interaction.user.id &&
+                (i.customId === `jtc_delete_confirm_${triggerChannel.id}` ||
+                    i.customId === `jtc_delete_cancel_${triggerChannel.id}`),
+            time: 600_000,
+            max: 1
+        });
+
+        deleteCollector.on('collect', async (buttonInteraction) => {
+            try {
+                if (!hasManageGuildPermission(buttonInteraction.member)) {
+                    await buttonInteraction.reply({
+                        content: t(lang, 'wolf.cmd.jtc.permDeniedRemove'),
+                        flags: MessageFlags.Ephemeral
+                    });
+                    return;
+                }
+
+                if (buttonInteraction.customId === `jtc_delete_confirm_${triggerChannel.id}`) {
+                    await removeTriggerChannel(client, interaction.guild.id, triggerChannel.id);
+
+                    await logConfigurationChange(client, interaction.guild.id, interaction.user.id, 'Removed Join to Create trigger', {
+                        channelId: triggerChannel.id, channelName: triggerChannel.name
+                    });
+
+                    try {
+                        if (triggerChannel.members.size === 0) {
+                            await triggerChannel.delete('Join to Create trigger removed by administrator');
+                        }
+                    } catch (deleteError) {
+                        logger.warn(`Could not delete channel ${triggerChannel.id}: ${deleteError.message}`);
+                    }
+
+                    await buttonInteraction.update({
+                        embeds: [successEmbed(
+                            t(lang, 'wolf.cmd.jtc.deleteSuccessTitle'),
+                            t(lang, 'wolf.cmd.jtc.deleteSuccessDesc', { name: triggerChannel.name })
+                        )],
+                        components: []
+                    });
+
+                } else {
+                    await buttonInteraction.update({
+                        embeds: [successEmbed(
+                            t(lang, 'wolf.cmd.jtc.deleteCancelTitle'),
+                            t(lang, 'wolf.cmd.jtc.deleteCancelDesc')
+                        )],
+                        components: []
+                    });
+                }
+            } catch (collectError) {
+                logger.error('Error handling delete confirmation:', collectError);
+                await buttonInteraction.reply({
+                    content: `❌ ${t(lang, 'wolf.cmd.jtc.deleteError')}`,
+                    flags: MessageFlags.Ephemeral
+                }).catch(() => {});
+            }
+        });
+
+        deleteCollector.on('end', (collected, reason) => {
+            if (reason === 'time' && collected.size === 0) {
+                message.edit({ components: [] }).catch(() => {});
+            }
         });
 
     } catch (error) {
-        logger.error('Error deleting Join to Create channel:', error);
-        const errorMsg = error instanceof TitanBotError ? error.userMessage : t(lang, 'wolf.cmd.jtc.deleteFailed');
-        if (interaction.deferred || interaction.replied) {
-            await interaction.editReply({ content: errorMsg, embeds: [], components: [] });
-        } else {
-            await interaction.reply({ content: errorMsg, flags: MessageFlags.Ephemeral });
-        }
+        if (error instanceof TitanBotError) throw error;
+        logger.error('Unexpected error in handleChannelDeletion:', error);
+        throw new TitanBotError(
+            `Deletion error: ${error.message}`,
+            ErrorTypes.UNKNOWN,
+            t(lang, 'wolf.cmd.jtc.deleteUnknownError')
+        );
     }
 }

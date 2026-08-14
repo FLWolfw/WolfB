@@ -148,20 +148,20 @@ export async function registerCommands(client, guildId) {
             commands.forEach((cmd) => {
                 if (cmd.name && cmd.name.length > 32)
                     validationErrors.push(`Command ${cmd.name} has name longer than 32 chars`);
-                if (cmd.description && cmd.description.length > 110)
-                    validationErrors.push(`Command ${cmd.name} has description longer than 110 chars`);
+                if (cmd.description && cmd.description.length > 100)
+                    validationErrors.push(`Command ${cmd.name} has description longer than 100 chars`);
                 
                 if (cmd.options) {
                     cmd.options.forEach((option) => {
                         if (option.name && option.name.length > 32)
                             validationErrors.push(`Command ${cmd.name} option ${option.name} has name longer than 32 chars`);
-                        if (option.description && option.description.length > 110)
-                            validationErrors.push(`Command ${cmd.name} option ${option.name} has description longer than 110 chars`);
+                        if (option.description && option.description.length > 100)
+                            validationErrors.push(`Command ${cmd.name} option ${option.name} has description longer than 100 chars`);
                         
                         if (option.choices) {
                             option.choices.forEach((choice) => {
-                                if (choice.name && choice.name.length > 110)
-                                    validationErrors.push(`Choice ${choice.name} has name longer than 110 chars`);
+                                if (choice.name && choice.name.length > 100)
+                                    validationErrors.push(`Choice ${choice.name} has name longer than 100 chars`);
                                 if (choice.value && choice.value.length > 100)
                                     validationErrors.push(`Choice ${choice.name} has value longer than 100 chars`);
                             });
@@ -171,8 +171,8 @@ export async function registerCommands(client, guildId) {
                             option.options.forEach((subOption) => {
                                 if (subOption.name && subOption.name.length > 32)
                                     validationErrors.push(`Subcommand option ${subOption.name} has name longer than 32 chars`);
-                                if (subOption.description && subOption.description.length > 110)
-                                    validationErrors.push(`Subcommand option ${subOption.name} has description longer than 110 chars`);
+                                if (subOption.description && subOption.description.length > 100)
+                                    validationErrors.push(`Subcommand option ${subOption.name} has description longer than 100 chars`);
                             });
                         }
                     });

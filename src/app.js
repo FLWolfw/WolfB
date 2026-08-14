@@ -1,4 +1,4 @@
-import { Client, Collection, GatewayIntentBits, Partials, ActivityType } from 'discord.js';
+import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import express from 'express';
 import session from 'express-session';
 import cron from 'node-cron';
@@ -8,8 +8,7 @@ import loadEvents from './handlers/events.js';
 import { registerCommands as registerSlashCommands } from './handlers/commandLoader.js';
 import { createDatabase } from './utils/database.js';
 import { logger, startupLog, shutdownLog } from './utils/logger.js';
-import { appConfig } from './config/application.js';
-import botConfig from './config/bot.js';
+import appConfig from './config/application.js';
 import { checkGiveaways } from './services/giveawayService.js';
 import { checkBirthdays } from './services/birthdayService.js';
 

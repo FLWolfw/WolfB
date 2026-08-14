@@ -1,6 +1,5 @@
 import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import express from 'express';
-import session from 'express-session';
 import cron from 'node-cron';
 import { loadCommands } from './handlers/commandLoader.js';
 import loadInteractions from './handlers/interactions.js';
@@ -10,6 +9,7 @@ import { logger, startupLog, shutdownLog } from './utils/logger.js';
 import appConfig from './config/application.js';
 import { checkGiveaways } from './services/giveawayService.js';
 import { checkBirthdays } from './services/birthdayService.js';
+import { setupDashboard } from './dashboard/index.js';
 
 export class TitanBot extends Client {
   constructor() {
@@ -79,17 +79,6 @@ export class TitanBot extends Client {
     const app = express();
     app.set('trust proxy', 1);
     app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
-    app.use(session({
-      secret: process.env.SESSION_SECRET || 'change-me',
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax',
-      },
-    }));
 
     app.get('/health', (req, res) => res.json({
       ok: true,
@@ -97,6 +86,8 @@ export class TitanBot extends Client {
       guilds: this.guilds.cache.size,
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
     }));
+
+    setupDashboard(app, this);
 
     app.use((req, res) => res.status(404).json({ error: `Route not found: ${req.url}` }));
 

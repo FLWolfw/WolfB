@@ -1,0 +1,32 @@
+export default {
+  common: {
+    success: 'Success', error: 'Error', warning: 'Warning', info: 'Information',
+    cancel: 'Cancel', confirm: 'Confirm', close: 'Close', save: 'Save',
+    back: 'Back', next: 'Next', yes: 'Yes', no: 'No', enabled: 'Enabled', disabled: 'Disabled',
+    loading: 'Loading...', noPermission: 'You do not have permission to do this.',
+    userNotFound: 'User not found.', channelNotFound: 'Channel not found.',
+    roleNotFound: 'Role not found.', unexpectedError: 'An unexpected error occurred.',
+  },
+  language: {
+    title: '🌎 Wolf Language', description: 'Select the language Wolf will use in this server.',
+    spanish: 'Español', english: 'English', changedEs: 'The server language was changed to Español.',
+    changedEn: 'The server language was changed to English.', permission: 'Only users with the Manage Server permission can change the language.',
+  },
+  tickets: {
+    title: 'Support Tickets', create: 'Create Ticket', created: 'Ticket Created', close: 'Close Ticket',
+    claim: 'Claim', pin: 'Pin', reason: 'Reason', priority: 'Priority', status: 'Status',
+    open: 'Open', closed: 'Closed', claimed: 'Claimed', unclaimed: 'Not claimed',
+    askReason: 'Why are you creating this ticket?', describe: 'Describe your issue...',
+    experience: 'How was your support experience?', rating: 'Select a rating',
+  },
+  moderation: { noPermission: 'You do not have permission to use this command.', botCannotModerate: 'Wolf cannot moderate this user because of role hierarchy.', success: 'Moderation applied successfully.' },
+  antispam: { title: 'Anti-Spam', enabled: 'Anti-Spam enabled.', disabled: 'Anti-Spam disabled.', detected: 'Spam detected.', timeout: 'User timed out for spam.', hierarchy: 'The timeout could not be applied because of role hierarchy.' },
+  antinuke: { title: 'Anti-Nuke', enabled: 'Anti-Nuke enabled.', disabled: 'Anti-Nuke disabled.', alert: 'Suspicious activity detected.' },
+  leveling: { level: 'Level', experience: 'Experience', rank: 'Rank', leaderboard: 'Leaderboard', congratulations: 'Congratulations! You leveled up.' },
+  roles: { role: 'Role', added: 'Role added.', removed: 'Role removed.', reactionRole: 'Reaction Roles' },
+  giveaways: { title: 'Giveaway', winner: 'Winner', winners: 'Winners', ended: 'The giveaway has ended.', entries: 'Entries' },
+  birthdays: { title: 'Birthdays', birthday: 'Birthday', next: 'Upcoming birthdays', saved: 'Birthday saved successfully.' },
+  voice: { join: 'Join Voice Channel', leave: 'Leave Voice Channel', joined: 'Wolf joined the voice channel.', left: 'Wolf left the voice channel.', noChannel: 'No voice channel was selected.' },
+  dashboard: { settings: 'Settings', server: 'Server', overview: 'Overview', save: 'Save Changes', saved: 'Changes saved successfully.', antiSpam: 'Anti-Spam', antiNuke: 'Anti-Nuke', logs: 'Logs', moderation: 'Moderation' },
+  errors: { database: 'I\'m having trouble with the database while processing your interaction.', interactionExpired: 'This interaction has expired. Please try again.', unknown: 'An unexpected error occurred.' },
+};

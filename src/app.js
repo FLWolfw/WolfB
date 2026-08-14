@@ -6,7 +6,7 @@ import { loadCommands } from './handlers/commandLoader.js';
 import { loadInteractions } from './handlers/interactions.js';
 import loadEvents from './handlers/events.js';
 import { registerCommands as registerSlashCommands } from './handlers/commandLoader.js';
-import { createDatabase } from './utils/database.js';
+import { initializeDatabase } from './utils/database.js';
 import { logger, startupLog, shutdownLog } from './utils/logger.js';
 import appConfig from './config/application.js';
 import { checkGiveaways } from './services/giveawayService.js';
@@ -47,8 +47,9 @@ export class TitanBot extends Client {
   async start() {
     try {
       startupLog('Initializing database...');
-      this.db = await createDatabase();
-      startupLog(`Database ready — ${this.db.type}`);
+      const databaseResult = await initializeDatabase();
+      this.db = databaseResult.db;
+      startupLog(`Database ready — ${this.db.getConnectionType()}`);
 
       startupLog('Loading commands...');
       await loadCommands(this);

@@ -8,6 +8,7 @@ import { csrfProtection } from './lib/csrf.js';
 import { authRoutes } from './routes/auth.js';
 import { pageRoutes } from './routes/pages.js';
 import { apiRoutes } from './routes/api.js';
+import { antiSpamRoutes } from './routes/antiSpam.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,8 +46,9 @@ export function setupDashboard(app, client) {
   app.use(csrfProtection);
 
   app.use('/', authRoutes());
+  app.use('/', antiSpamRoutes(client));
   app.use('/', pageRoutes(client));
   app.use('/api', apiRoutes(client));
 
-  logger.info('Wolf dashboard mounted (/, /dashboard, /server/:id, /api)');
+  logger.info('Wolf dashboard mounted (/, /dashboard, /server/:id, /server/:id/antispam, /api)');
 }

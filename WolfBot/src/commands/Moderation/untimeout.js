@@ -1,0 +1,60 @@
+import { SlashCommandBuilder, PermissionFlagsBits, PermissionsBitField, ChannelType } from 'discord.js';
+import { createEmbed, errorEmbed, successEmbed, infoEmbed, warningEmbed } from '../../utils/embeds.js';
+import { logEvent } from '../../utils/moderation.js';
+import { logger } from '../../utils/logger.js';
+import { ModerationService } from '../../services/moderationService.js';
+import { handleInteractionError } from '../../utils/errorHandler.js';
+import { InteractionHelper } from '../../utils/interactionHelper.js';
+import { t, pickLanguage } from '../../services/i18n.js';
+export default {
+    data: new SlashCommandBuilder()
+        .setName("untimeout")
+        .setDescription("Remove timeout from a user")
+        .addUserOption((option) =>
+            option
+                .setName("target")
+                .setDescription("User to untimeout")
+                .setRequired(true),
+        )
+.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    category: "moderation",
+
+    async execute(interaction, config, client) {
+        const lang = pickLanguage(config, interaction.guild);
+        const deferSuccess = await InteractionHelper.safeDefer(interaction);
+        if (!deferSuccess) {
+            logger.warn(`Untimeout interaction defer failed`, {
+                userId: interaction.user.id,
+                guildId: interaction.guildId,
+                commandName: 'untimeout'
+            });
+            return;
+        }
+
+        try {
+                const targetUser = interaction.options.getUser("target");
+                const member = interaction.options.getMember("target");
+
+                
+                const result = await ModerationService.removeTimeoutUser({
+                    guild: interaction.guild,
+                    member,
+                    moderator: interaction.member
+                });
+
+                await InteractionHelper.safeEditReply(interaction, {
+                    embeds: [
+                        successEmbed(
+                            t(lang, 'wolf.cmd.mod.untimeout.successTitle', { user: targetUser.tag }),
+                        ),
+                    ],
+                });
+        } catch (error) {
+            logger.error('Untimeout command error:', error);
+            await handleInteractionError(interaction, error, { subtype: 'untimeout_failed' });
+        }
+    }
+};
+
+
+

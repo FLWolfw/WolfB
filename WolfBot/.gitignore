@@ -1,0 +1,103 @@
+# Logs (IGNORA logs generales PERO NO LOS DEL BOT)
+logs/
+!src/events/logs/
+!src/events/logs/**
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Local development files
+.local/
+attached_assets/
+
+# Configuration and cache files
+.config/
+.git.backup.*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage / testing
+coverage
+*.lcov
+.nyc_output
+
+# Build / cache
+.grunt
+.cache
+.parcel-cache
+.temp
+
+# Dependencies
+node_modules/
+jspm_packages/
+web_modules/
+
+# TypeScript
+*.tsbuildinfo
+
+# npm cache
+.npm
+.npm-cache/
+
+# eslint / stylelint
+.eslintcache
+.stylelintcache
+
+# bundlers
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# REPL history
+.node_repl_history
+
+# package output
+*.tgz
+.yarn-integrity
+
+# ENV FILES (IMPORTANTE)
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Frameworks
+.next
+out
+.nuxt
+dist
+.vuepress/dist
+.docusaurus
+
+# Serverless
+.serverless/
+
+# Misc
+.fusebox/
+.dynamodb/
+.tern-port
+.vscode-test
+.breakpoints
+
+# Yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Backups
+backups/
+*.dump

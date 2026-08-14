@@ -35,8 +35,8 @@ export default {
 
       const me = interaction.guild.members.me;
       if (
-        !vc.permissionsFor(me)?.has(PermissionFlagsBits.Connect) ||
-        !vc.permissionsFor(me)?.has(PermissionFlagsBits.Speak)
+        !vc.permissionsFor(me)?.has(PermissionFlagsBits.ViewChannel) ||
+        !vc.permissionsFor(me)?.has(PermissionFlagsBits.Connect)
       ) {
         return interaction.reply({
           embeds: [{ color: 0xef4444, title: t(lang, 'wolf.cmd.voice.noPermsTitle'), description: t(lang, 'wolf.cmd.voice.noPermsDesc', { channel: `${vc}` }) }],
@@ -50,7 +50,7 @@ export default {
           guildId: interaction.guildId,
           adapterCreator: interaction.guild.voiceAdapterCreator,
           selfDeaf: true,
-          selfMute: false,
+          selfMute: true,
         });
         return interaction.reply({
           embeds: [{ color: 0x22c55e, title: t(lang, 'wolf.cmd.voice.joinedTitle'), description: t(lang, 'wolf.cmd.voice.joinedDesc', { channel: `${vc}` }) }],

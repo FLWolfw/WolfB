@@ -46,8 +46,8 @@ function translateText(value, language) {
 async function getLanguage(client, guildId) {
   if (!client || !guildId) return 'en';
   try {
-    const { getGuildConfig } = await import('../services/guildConfigService.js');
-    const config = await getGuildConfig(client.db, guildId);
+    const { getGuildConfig } = await import('../services/guildConfig.js');
+    const config = await getGuildConfig(client, guildId);
     return normalizeLanguage(config?.language);
   } catch (error) {
     console.warn(`[i18n] Could not read guild language for ${guildId}: ${error?.message || error}`);

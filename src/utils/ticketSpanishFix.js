@@ -1,4 +1,4 @@
-import { BaseGuildTextChannel, Message, CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction, User } from 'discord.js';
+import { BaseGuildTextChannel, Message, CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction, User, ModalBuilder, TextInputBuilder } from 'discord.js';
 
 // IMPORTANT: Do not recursively clone Discord.js builders.
 // Discord.js builders contain internal state and must keep their own prototypes.
@@ -86,6 +86,44 @@ function patch(klass, method) {
   });
 }
 
+// Modal builders cannot be translated through reply/editReply payloads because
+// showModal receives the builder directly. Translate only the visible strings
+// while preserving the actual builder/component objects and their `type` data.
+function patchBuilderString(klass, method, replacements, markerName) {
+  const original = klass?.prototype?.[method];
+  if (typeof original !== 'function') return;
+
+  const marker = `__wolfSpanishModal_${markerName}`;
+  if (klass.prototype[marker]) return;
+
+  klass.prototype[method] = function patchedBuilderString(value, ...args) {
+    const translated = typeof value === 'string'
+      ? replacements.reduce((text, [from, to]) => text.split(from).join(to), value)
+      : value;
+    return original.call(this, translated, ...args);
+  };
+
+  Object.defineProperty(klass.prototype, marker, {
+    value: true,
+    enumerable: false,
+  });
+}
+
+patchBuilderString(ModalBuilder, 'setTitle', [
+  ['Create a Ticket', 'Crear un Ticket'],
+  ['Close Ticket', 'Cerrar Ticket'],
+], 'title');
+
+patchBuilderString(TextInputBuilder, 'setLabel', [
+  ['Why are you creating this ticket?', '¿Por qué estás creando este ticket?'],
+  ['Reason for closing (optional)', 'Motivo del cierre (opcional)'],
+], 'label');
+
+patchBuilderString(TextInputBuilder, 'setPlaceholder', [
+  ['Describe your issue...', 'Describe tu problema...'],
+  ['Add an optional reason for closing this ticket...', 'Añade un motivo opcional para cerrar este ticket...'],
+], 'placeholder');
+
 for (const Klass of [
   CommandInteraction,
   ModalSubmitInteraction,
@@ -103,4 +141,4 @@ patch(BaseGuildTextChannel, 'send');
 patch(Message, 'edit');
 patch(User, 'send');
 
-console.log('[i18n] Safe Spanish ticket wording fix enabled');
+console.log('[i18n] Safe Spanish ticket wording + modal fix enabled');

@@ -3,28 +3,30 @@ import { getTicketData, saveTicketData } from '../../utils/database.js';
 import { logger } from '../../utils/logger.js';
 import { getColor } from '../../config/bot.js';
 import { getGuildConfig } from '../../services/guildConfig.js';
-
-const STAR_LABELS = {
-    '1': '⭐ 1 — Poor',
-    '2': '⭐⭐ 2 — Below Average',
-    '3': '⭐⭐⭐ 3 — Average',
-    '4': '⭐⭐⭐⭐ 4 — Good',
-    '5': '⭐⭐⭐⭐⭐ 5 — Excellent',
-};
+import { t, pickLanguage } from '../../services/i18n.js';
 
 const feedbackHandler = {
     name: 'ticket_feedback',
 
     async execute(interaction, client, args) {
-        // args = [guildId, channelId, rating]
         const [guildId, channelId, ratingStr] = args;
+        const guild = interaction.guild || client.guilds.cache.get(guildId);
+        let guildConfig = null;
+        try {
+            guildConfig = await getGuildConfig(client, guildId);
+        } catch (err) {
+            logger.warn('ticketFeedback: failed to load guild config', { guildId, error: err.message });
+        }
+        const lang = pickLanguage(guildConfig, guild);
+        const tr = (key, vars = {}) => t(lang, `wolf.ticketFeedback.${key}`, vars);
+        const starLabel = (rating) => tr(`starLabels.${String(rating)}`) || `${rating} stars`;
 
         if (!guildId || !channelId || !ratingStr) {
             await interaction.update({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle('⚠️ Invalid Feedback Link')
-                        .setDescription('This feedback link appears to be malformed.')
+                        .setTitle(tr('invalidTitle'))
+                        .setDescription(tr('invalidDesc'))
                         .setColor(getColor('error')),
                 ],
                 components: [],
@@ -43,8 +45,8 @@ const feedbackHandler = {
             await interaction.update({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle('⚠️ Ticket Not Found')
-                        .setDescription('Could not find the ticket associated with this survey.')
+                        .setTitle(tr('notFoundTitle'))
+                        .setDescription(tr('notFoundDesc'))
                         .setColor(getColor('error')),
                 ],
                 components: [],
@@ -56,8 +58,8 @@ const feedbackHandler = {
             await interaction.reply({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle('❌ Not Allowed')
-                        .setDescription('Only the ticket creator can submit feedback for this ticket.')
+                        .setTitle(tr('notAllowedTitle'))
+                        .setDescription(tr('notAllowedDesc'))
                         .setColor(getColor('error')),
                 ],
                 ephemeral: true,
@@ -66,11 +68,12 @@ const feedbackHandler = {
         }
 
         if (ticketData.feedback?.rating) {
+            const ratingLabel = starLabel(ticketData.feedback.rating);
             await interaction.update({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle('✅ Already Submitted')
-                        .setDescription(`You already rated this ticket **${STAR_LABELS[String(ticketData.feedback.rating)]}**.\nThank you for your feedback!`)
+                        .setTitle(tr('alreadySubmittedTitle'))
+                        .setDescription(tr('alreadySubmittedDesc', { rating: ratingLabel }))
                         .setColor(getColor('success')),
                 ],
                 components: [],
@@ -79,7 +82,7 @@ const feedbackHandler = {
         }
 
         const rating = parseInt(ratingStr, 10);
-        const ratingLabel = STAR_LABELS[String(rating)] ?? `${rating} stars`;
+        const ratingLabel = starLabel(rating);
 
         try {
             ticketData.feedback = {
@@ -91,24 +94,22 @@ const feedbackHandler = {
             logger.error('ticketFeedback: failed to save feedback', { guildId, channelId, rating, error: err.message });
         }
 
-        // Send feedback to logs channel
         try {
-            const guildConfig = await getGuildConfig(interaction.client, guildId);
-            if (guildConfig.ticketLogsChannelId) {
+            if (guildConfig?.ticketLogsChannelId) {
                 const logsChannel = await interaction.client.channels.fetch(guildConfig.ticketLogsChannelId).catch(() => null);
                 if (logsChannel && logsChannel.isSendable()) {
                     const feedbackEmbed = new EmbedBuilder()
-                        .setTitle('📋 Ticket Feedback Received')
-                        .setDescription('User submitted feedback for a ticket')
+                        .setTitle(tr('feedbackLogTitle'))
+                        .setDescription(tr('feedbackLogDesc'))
                         .setColor(getColor('info'))
                         .addFields(
-                            { name: 'Ticket ID', value: `\`${channelId}\``, inline: true },
-                            { name: 'Rating', value: ratingLabel, inline: true },
-                            { name: 'User', value: `<@${interaction.user.id}>`, inline: true },
-                            { name: 'Submitted', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+                            { name: tr('ticketId'), value: `\`${channelId}\``, inline: true },
+                            { name: tr('rating'), value: ratingLabel, inline: true },
+                            { name: tr('user'), value: `<@${interaction.user.id}>`, inline: true },
+                            { name: tr('submitted'), value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
                         )
                         .setThumbnail(interaction.user.displayAvatarURL())
-                        .setFooter({ text: `User ID: ${interaction.user.id}` })
+                        .setFooter({ text: tr('userId', { id: interaction.user.id }) })
                         .setTimestamp();
 
                     await logsChannel.send({ embeds: [feedbackEmbed] });
@@ -121,10 +122,10 @@ const feedbackHandler = {
         await interaction.update({
             embeds: [
                 new EmbedBuilder()
-                    .setTitle('✅ Thanks for your feedback!')
-                    .setDescription(`You rated your support experience **${ratingLabel}**.\n\nYour feedback has been recorded and helps us improve!`)
+                    .setTitle(tr('thanksTitle'))
+                    .setDescription(tr('thanksDesc', { rating: ratingLabel }))
                     .setColor(getColor('success'))
-                    .setFooter({ text: 'Thank you for using our support system.' })
+                    .setFooter({ text: tr('footer') })
                     .setTimestamp(),
             ],
             components: [],
@@ -143,11 +144,15 @@ const declineHandler = {
     name: 'ticket_feedback_decline',
 
     async execute(interaction) {
+        const guildId = interaction.guildId;
+        const guildConfig = guildId ? await getGuildConfig(interaction.client, guildId).catch(() => null) : null;
+        const lang = pickLanguage(guildConfig, interaction.guild);
+
         await interaction.update({
             embeds: [
                 new EmbedBuilder()
-                    .setTitle('👋 No problem!')
-                    .setDescription('You can always reach out again if you need further support.')
+                    .setTitle(t(lang, 'wolf.ticketFeedback.declineTitle'))
+                    .setDescription(t(lang, 'wolf.ticketFeedback.declineDesc'))
                     .setColor(getColor('default')),
             ],
             components: [],

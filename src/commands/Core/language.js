@@ -1,11 +1,19 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, SlashCommandBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('language')
-    .setDescription('Change Wolf\'s language for this server'),
+    .setDescription("Change Wolf's language for this server")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return await interaction.reply({
+        content: '❌ You need the **Manage Server** permission to change Wolf\'s language.',
+        ephemeral: true,
+      });
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setTitle('🌎 Wolf — Language / Idioma')

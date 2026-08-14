@@ -1,9 +1,24 @@
 import { BaseGuildTextChannel, Message, CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction, User } from 'discord.js';
 
+// IMPORTANT: Do not recursively clone Discord.js builders.
+// Discord.js builders contain internal state and must keep their own prototypes.
+// The old recursive translator converted EmbedBuilder/ActionRowBuilder/etc.
+// into plain objects, which could leave interactions stuck or produce invalid
+// Discord payloads. Translate only the serializable message fields we actually
+// need and leave components untouched.
+
 const replacements = [
   ['Tu ticket has been created in', 'Tu ticket ha sido creado en'],
   ['Reclamared By', 'Reclamado por'],
   ['Reclaimed By', 'Reclamado por'],
+  ['Claimed By', 'Reclamado por'],
+  ['Not claimed', 'No reclamado'],
+  ['Your Ticket Has Been Closed', 'Tu Ticket Ha Sido Cerrado'],
+  ['Your ticket', 'Tu ticket'],
+  ['has been closed.', 'ha sido cerrado.'],
+  ['Closed by:', 'Cerrado por:'],
+  ['Closed at:', 'Cerrado el:'],
+  ['A DM has been sent to the ticket creator.', 'Se ha enviado un mensaje privado al creador del ticket.'],
 ];
 
 function translateString(value) {
@@ -13,39 +28,79 @@ function translateString(value) {
   return result;
 }
 
-function translateObject(value, seen = new WeakSet()) {
-  if (typeof value === 'string') return translateString(value);
-  if (!value || typeof value !== 'object') return value;
-  if (seen.has(value)) return value;
-  seen.add(value);
-  if (Array.isArray(value)) return value.map(item => translateObject(item, seen));
-  const out = {};
-  for (const [key, child] of Object.entries(value)) out[key] = translateObject(child, seen);
+function translateEmbed(embed) {
+  if (!embed) return embed;
+
+  // Convert only the embed itself to JSON. Never recursively clone the builder.
+  const data = typeof embed.toJSON === 'function' ? embed.toJSON() : { ...embed };
+
+  if (typeof data.title === 'string') data.title = translateString(data.title);
+  if (typeof data.description === 'string') data.description = translateString(data.description);
+  if (data.footer && typeof data.footer.text === 'string') {
+    data.footer = { ...data.footer, text: translateString(data.footer.text) };
+  }
+  if (Array.isArray(data.fields)) {
+    data.fields = data.fields.map(field => ({
+      ...field,
+      name: translateString(field?.name),
+      value: translateString(field?.value),
+    }));
+  }
+
+  return data;
+}
+
+function translatePayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  // Keep MessagePayload/options and all component builders intact.
+  const out = { ...payload };
+
+  if (typeof out.content === 'string') {
+    out.content = translateString(out.content);
+  }
+
+  if (Array.isArray(out.embeds)) {
+    out.embeds = out.embeds.map(translateEmbed);
+  }
+
+  // DO NOT touch components. Discord modal/action-row builders must retain
+  // their component type metadata and prototypes.
   return out;
 }
 
 function patch(klass, method) {
   const original = klass?.prototype?.[method];
   if (typeof original !== 'function') return;
-  const marker = `__wolfSpanishFix_${method}`;
+
+  const marker = `__wolfSpanishSafe_${method}`;
   if (klass.prototype[marker]) return;
+
   klass.prototype[method] = function patched(value, ...args) {
-    return original.call(this, translateObject(value), ...args);
+    return original.call(this, translatePayload(value), ...args);
   };
-  Object.defineProperty(klass.prototype, marker, { value: true, enumerable: false });
+
+  Object.defineProperty(klass.prototype, marker, {
+    value: true,
+    enumerable: false,
+  });
 }
 
-for (const Klass of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction]) {
+for (const Klass of [
+  CommandInteraction,
+  ModalSubmitInteraction,
+  ButtonInteraction,
+  StringSelectMenuInteraction,
+]) {
   patch(Klass, 'reply');
   patch(Klass, 'editReply');
   patch(Klass, 'followUp');
   patch(Klass, 'update');
-  // NEVER patch showModal: Discord modal component payloads require their
-  // component type discriminator and must be sent using the original builder.
+  // NEVER patch showModal. Modal builders must be passed through untouched.
 }
 
 patch(BaseGuildTextChannel, 'send');
 patch(Message, 'edit');
 patch(User, 'send');
 
-console.log('[i18n] Final Spanish ticket wording fix enabled');
+console.log('[i18n] Safe Spanish ticket wording fix enabled');

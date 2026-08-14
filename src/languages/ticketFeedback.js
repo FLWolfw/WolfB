@@ -19,6 +19,10 @@ export const ticketFeedbackTranslations = {
     footer: 'Gracias por utilizar nuestro sistema de soporte.',
     declineTitle: '👋 ¡No hay problema!',
     declineDesc: 'Puedes volver a contactarnos si necesitas más ayuda.',
+    declineButton: '❌ No, gracias',
+    surveyTitle: '⭐ ¿Qué te pareció tu experiencia de soporte?',
+    surveyDesc: 'Nos gustaría saber qué tal lo hicimos con **{ticket}**.\n¡Selecciona una valoración! Solo te tomará un segundo.',
+    surveyFooter: 'Tu opinión nos ayuda a mejorar.',
     userId: 'ID de usuario: {id}',
     starLabels: {
       '1': '⭐ 1 — Muy mala',
@@ -48,6 +52,10 @@ export const ticketFeedbackTranslations = {
     footer: 'Thank you for using our support system.',
     declineTitle: '👋 No problem!',
     declineDesc: 'You can always reach out again if you need further support.',
+    declineButton: '❌ No thanks',
+    surveyTitle: '⭐ How was your support experience?',
+    surveyDesc: "We'd love to know how we did with **{ticket}**.\nSelect a rating below — it only takes a second!",
+    surveyFooter: 'Your feedback helps us improve.',
     userId: 'User ID: {id}',
     starLabels: {
       '1': '⭐ 1 — Poor',

@@ -1,5 +1,6 @@
 import { PermissionFlagsBits } from 'discord.js';
 import { getGuildConfig, updateAntiSpamConfig } from './guildConfigService.js';
+import { logger } from '../utils/logger.js';
 
 const runtime = new Map();
 
@@ -78,10 +79,32 @@ export async function processAntiSpam(message, client) {
   existing.timestamps = [];
   existing.contents = [];
 
-  if (config.deleteMessages) await message.delete().catch(() => {});
-  if (message.member.moderatable) {
-    await message.member.timeout(config.timeoutMs, 'Wolf Anti-Spam: message spam detected').catch(() => {});
+  if (config.deleteMessages) {
+    await message.delete().catch((error) => {
+      logger.warn(`Anti-Spam could not delete message in guild ${message.guild.id}: ${error?.message || error}`);
+    });
   }
+
+  const botMember = message.guild.members.me;
+  const canModerate = botMember?.permissions.has(PermissionFlagsBits.ModerateMembers) && message.member.moderatable;
+
+  if (!canModerate) {
+    logger.warn(
+      `Anti-Spam detected spam in guild ${message.guild.id} from ${message.author.id}, ` +
+      `but timeout was skipped: botModerateMembers=${Boolean(botMember?.permissions.has(PermissionFlagsBits.ModerateMembers))}, ` +
+      `targetModeratable=${Boolean(message.member.moderatable)}. ` +
+      'Ensure Wolf has Moderate Members and its role is above the target member.'
+    );
+    return true;
+  }
+
+  try {
+    await message.member.timeout(config.timeoutMs, 'Wolf Anti-Spam: message spam detected');
+    logger.info(`Anti-Spam timeout applied to ${message.author.tag} (${message.author.id}) in guild ${message.guild.id} for ${config.timeoutMs}ms`);
+  } catch (error) {
+    logger.error(`Anti-Spam timeout failed in guild ${message.guild.id} for ${message.author.id}:`, error);
+  }
+
   return true;
 }
 

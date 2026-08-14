@@ -15,7 +15,7 @@ const ES = new Map([
   ['Thanks for creating a ticket!', '¡Gracias por crear un ticket!'], ['thanks for creating a ticket!', '¡gracias por crear un ticket!'], ['Your ticket has been created in', 'Tu ticket ha sido creado en'],
   ['This ticket has been pinned to the top of the category.', 'Este ticket ha sido fijado en la parte superior de la categoría.'], ['This ticket has been unpinned and moved back to normal position.', 'Este ticket ha dejado de estar fijado y volvió a su posición normal.'],
   ['This ticket has been closed.', 'Este ticket ha sido cerrado.'], ['This ticket will be permanently deleted in 3 seconds.', 'Este ticket será eliminado permanentemente en 3 segundos.'], ['A priority value is required.', 'Se requiere un valor de prioridad.'],
-  ['Ticket priority set to', 'Prioridad del ticket establecida en'], ['Ticket priority updated to', 'Prioridad del ticket actualizada a'], ['How was your support experience?', '¿Cómo fue tu experiencia con el soporte?'], ["We'd love to know how we did with", 'Nos gustaría saber cómo lo hicimos con'],
+  ['Ticket priority set to', 'Prioridad del ticket establecida en'], ['Ticket priority updated to', 'Prioridad del ticket actualizada a'], ['How was your support experience?', '¿Cómo fue tu experiencia con el soporte?'], ["We'd love to know how we did with", 'Nos gustaría saber qué tal lo hicimos con'],
   ['Select a rating below — it only takes a second!', 'Selecciona una valoración; solo tardarás un segundo.'], ['Select a rating below — it only takes a second!', 'Selecciona una valoración; solo te tomará un segundo.'], ['Your feedback helps us improve.', 'Tus comentarios nos ayudan a mejorar.'], ['No thanks', 'No, gracias'],
   ['Thank you for using our support system! If you have any further questions, feel free to create a new ticket.', '¡Gracias por utilizar nuestro sistema de soporte! Si tienes más preguntas, puedes crear un nuevo ticket.'],
   ['You have reached the maximum number of open tickets', 'Has alcanzado el número máximo de tickets abiertos'], ['Please close your existing tickets before creating a new one.', 'Cierra tus tickets existentes antes de crear uno nuevo.'], ['Current Tickets:', 'Tickets actuales:'],
@@ -76,11 +76,26 @@ function translateObject(value, language) {
   return out;
 }
 
-async function translatePayload(payload, client, guildId) {
+async function translatePayload(payload, client, guildId, preserveComponents = false) {
   const language = await getLanguage(client, guildId);
   if (language !== 'es') return payload;
   if (typeof payload === 'string') return translateText(payload, language);
   if (!payload || typeof payload !== 'object') return payload;
+
+  // Modals/components must retain Discord's component `type` discriminator.
+  // Rebuilding them as plain objects breaks showModal with TAG_FIELD_MISSING.
+  if (preserveComponents) {
+    const plain = toPlain(payload);
+    const translated = translateObject(plain, language);
+    if (Array.isArray(translated?.components)) {
+      translated.components = translated.components.map(component => {
+        if (!component || typeof component !== 'object') return component;
+        return { ...component, type: component.type ?? 1 };
+      });
+    }
+    return translated;
+  }
+
   return translateObject(toPlain(payload), language);
 }
 
@@ -123,7 +138,9 @@ for (const K of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, 
 }
 
 for (const K of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction]) {
-  patchMethod(K, 'showModal', fn => async function(modal, ...args) { return fn.call(this, await translatePayload(modal, this.client, this.guildId), ...args); });
+  // showModal is intentionally NOT translated/rebuilt. Discord requires the
+  // component type discriminator and the original builders already contain it.
+  patchMethod(K, 'showModal', fn => async function(modal, ...args) { return fn.call(this, modal, ...args); });
   patchMethod(K, 'update', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
 }
 

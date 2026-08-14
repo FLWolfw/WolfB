@@ -11,6 +11,7 @@ import { logger, startupLog, shutdownLog, printStartupBanner } from './utils/log
 import { checkBirthdays } from './services/birthdayService.js';
 import { checkGiveaways } from './services/giveawayService.js';
 import { loadCommands, registerCommands as registerSlashCommands } from './handlers/commandLoader.js';
+import loadInteractions from './handlers/interactions.js';
 
 import { setupDashboard } from './dashboard/index.js';
 import loadEvents from './handlers/events.js';
@@ -58,6 +59,9 @@ class TitanBot extends Client {
 
       startupLog('Loading commands...');
       await loadCommands(this);
+
+      startupLog('Loading interactions...');
+      await loadInteractions(this);
 
       startupLog('Loading events...');
       await loadEvents(this);

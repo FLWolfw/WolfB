@@ -5,7 +5,6 @@ import cron from 'node-cron';
 import { loadCommands } from './handlers/commandLoader.js';
 import loadInteractions from './handlers/interactions.js';
 import loadEvents from './handlers/events.js';
-import { registerCommands as registerSlashCommands } from './handlers/commandLoader.js';
 import { initializeDatabase } from './utils/database.js';
 import { logger, startupLog, shutdownLog } from './utils/logger.js';
 import appConfig from './config/application.js';
@@ -114,9 +113,39 @@ export class TitanBot extends Client {
   }
 
   async registerCommands() {
-    // Wolf is a multi-server bot. Register slash commands globally so every
-    // guild the bot is installed in receives the same command set.
-    await registerSlashCommands(this, null);
+    if (!this.application) {
+      throw new Error('Discord application is not available after login; cannot register global commands.');
+    }
+
+    const commands = [];
+    const names = new Set();
+
+    for (const command of this.commands.values()) {
+      if (!command?.data || typeof command.data.toJSON !== 'function') continue;
+      const commandJson = command.data.toJSON();
+      if (!commandJson.name || names.has(commandJson.name)) continue;
+      names.add(commandJson.name);
+      commands.push(commandJson);
+    }
+
+    if (commands.length > 100) {
+      throw new Error(`Cannot register ${commands.length} global commands: Discord allows a maximum of 100 top-level commands.`);
+    }
+
+    startupLog(`Global registration: sending ${commands.length} commands to Discord...`);
+    startupLog(`Global registration: antispam local=${names.has('antispam')}`);
+
+    const registered = await this.application.commands.set(commands);
+    startupLog(`Global registration: Discord accepted ${registered.size} commands.`);
+
+    const verified = await this.application.commands.fetch();
+    const verifiedNames = new Set(verified.map(command => command.name));
+    startupLog(`Global registration: Discord currently exposes ${verified.size} global commands.`);
+    startupLog(`Global registration: antispam discord=${verifiedNames.has('antispam')}`);
+
+    if (names.has('antispam') && !verifiedNames.has('antispam')) {
+      throw new Error("Discord did not return the global 'antispam' command after registration.");
+    }
   }
 }
 

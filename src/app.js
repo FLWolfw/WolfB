@@ -10,7 +10,6 @@ import { createDatabase } from './utils/database.js';
 import { logger, startupLog, shutdownLog } from './utils/logger.js';
 import { appConfig } from './config/application.js';
 import botConfig from './config/bot.js';
-import { updateAllCounters, getServerCounters, updateCounter } from './services/counterService.js';
 import { checkGiveaways } from './services/giveawayService.js';
 import { checkBirthdays } from './services/birthdayService.js';
 
@@ -112,24 +111,8 @@ export class TitanBot extends Client {
   setupCronJobs() {
     cron.schedule('0 6 * * *', () => checkBirthdays(this));
     cron.schedule('* * * * *', () => checkGiveaways(this));
-    cron.schedule('*/15 * * * *', async () => {
-      try {
-        await this.updateAllCounters();
-      } catch (err) {
-        logger.error('Cron error — updateAllCounters failed', { error: err });
-      }
-    });
 
-    logger.debug('Cron jobs scheduled (birthdays, giveaways, counters)');
-  }
-
-  async updateAllCounters() {
-    for (const guild of this.guilds.cache.values()) {
-      const counters = await getServerCounters(this, guild.id);
-      for (const counter of counters) {
-        await updateCounter(this, guild, counter);
-      }
-    }
+    logger.debug('Cron jobs scheduled (birthdays, giveaways)');
   }
 
   async registerCommands() {

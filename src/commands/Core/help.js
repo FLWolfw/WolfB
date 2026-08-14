@@ -6,9 +6,7 @@ import {
 } from "discord.js";
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 import { createEmbed } from "../../utils/embeds.js";
-import {
-    createSelectMenu,
-} from "../../utils/components.js";
+import { createSelectMenu } from "../../utils/components.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -41,10 +39,6 @@ const CATEGORY_ICONS = {
     Config: "⚙️",
 };
 
-
-
-
-
 export async function createInitialHelpMenu(client, lang = 'es') {
     const commandsPath = path.join(__dirname, "../../commands");
     const categoryDirs = (
@@ -61,13 +55,14 @@ export async function createInitialHelpMenu(client, lang = 'es') {
             value: ALL_COMMANDS_ID,
         },
         ...categoryDirs.map((category) => {
-            const categoryName =
-                category.charAt(0).toUpperCase() +
-                category.slice(1).toLowerCase();
-            const icon = CATEGORY_ICONS[categoryName] || "🔍";
+            const categoryKey = Object.keys(CATEGORY_ICONS).find(
+                (key) => key.toLowerCase() === category.toLowerCase()
+            ) || category;
+            const categoryText = t(lang, `wolf.cmd.help.categories.${categoryKey}`);
+            const icon = CATEGORY_ICONS[categoryKey] || "🔍";
             return {
-                label: `${icon} ${categoryName}`,
-                description: t(lang, 'wolf.cmd.help.categoryDesc', { name: categoryName }),
+                label: `${icon} ${categoryText.name || categoryKey}`,
+                description: categoryText.description || t(lang, 'wolf.cmd.help.categoryDesc', { name: categoryKey }),
                 value: category,
             };
         }),
@@ -80,83 +75,23 @@ export async function createInitialHelpMenu(client, lang = 'es') {
         color: 'primary'
     });
 
-    embed.addFields(
-        {
-            name: "🛡️ **Moderation**",
-            value: "Server moderation, user management, and enforcement tools",
-            inline: true
-        },
-        {
-            name: "💰 **Economy**",
-            value: "Currency system, shops, and virtual economy",
-            inline: true
-        },
-        {
-            name: "🎮 **Fun**",
-            value: "Games, entertainment, and interactive commands",
-            inline: true
-        },
-        {
-            name: "📊 **Leveling**",
-            value: "User levels, XP system, and progression tracking",
-            inline: true
-        },
-        {
-            name: "🎫 **Tickets**",
-            value: "Support ticket system for server management",
-            inline: true
-        },
-        {
-            name: "🎉 **Giveaways**",
-            value: "Automated giveaway management and distribution",
-            inline: true
-        },
-        {
-            name: "👋 **Welcome**",
-            value: "Member welcome messages and onboarding",
-            inline: true
-        },
-        {
-            name: "🎂 **Birthdays**",
-            value: "Birthday tracking and celebration features",
-            inline: true
-        },
-        {
-            name: "👥 **Community**",
-            value: "Community tools, applications, and member engagement",
-            inline: true
-        },
-        {
-            name: "⚙️ **Config**",
-            value: "Server and bot configuration management commands",
-            inline: true
-        },
-        {
-            name: "🔢 **Counter**",
-            value: "Live counter channel setup and counter controls",
-            inline: true
-        },
-        {
-            name: "🎙️ **Join to Create**",
-            value: "Dynamic voice channel creation and management",
-            inline: true
-        },
-        {
-            name: "🎭 **Reaction Roles**",
-            value: "Self-assignable roles using reaction-role systems",
-            inline: true
-        },
-        {
-            name: "✅ **Verification**",
-            value: "Member verification workflows and access gating",
-            inline: true
-        },
-        {
-            name: "🔧 **Utilities**",
-            value: "Useful tools and server utilities",
-            inline: true
-        }
-    );
+    const categoryFields = categoryDirs
+        .map((category) => {
+            const categoryKey = Object.keys(CATEGORY_ICONS).find(
+                (key) => key.toLowerCase() === category.toLowerCase()
+            ) || category;
+            const categoryText = t(lang, `wolf.cmd.help.categories.${categoryKey}`);
+            if (!categoryText || typeof categoryText !== 'object') return null;
+            const icon = CATEGORY_ICONS[categoryKey] || "🔍";
+            return {
+                name: `${icon} **${categoryText.name || categoryKey}**`,
+                value: categoryText.description || '',
+                inline: true,
+            };
+        })
+        .filter(Boolean);
+
+    embed.addFields(categoryFields);
 
     embed.setFooter({ text: t(lang, 'wolf.cmd.help.footer') });
     embed.setTimestamp();
@@ -224,4 +159,3 @@ export default {
         }, HELP_MENU_TIMEOUT_MS);
     },
 };
-

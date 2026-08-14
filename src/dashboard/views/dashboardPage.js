@@ -17,13 +17,16 @@ export function renderDashboard({ user, client, guilds, flash }) {
           const ic = g.icon
             ? `<img class="icon" src="https://cdn.discordapp.com/icons/${esc(g.id)}/${esc(g.icon)}.png?size=64" alt="">`
             : `<div class="fallback">${esc((g.name || '?').charAt(0).toUpperCase())}</div>`;
-          return `<a class="server-tile" href="/server/${esc(g.id)}">
-        ${ic}
-        <div class="meta">
-          <b>${esc(g.name)}</b>
-          <span>${icon('settings', 13)} Configurar</span>
-        </div>
-      </a>`;
+          return `<div class="server-tile">
+        <a href="/server/${esc(g.id)}" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px">
+          ${ic}
+          <div class="meta">
+            <b>${esc(g.name)}</b>
+            <span>${icon('settings', 13)} Configurar</span>
+          </div>
+        </a>
+        <a class="btn" href="/server/${esc(g.id)}/antispam" style="margin-left:auto">${icon('shield', 14)} Anti-Spam</a>
+      </div>`;
         })
         .join('')
     : `<div class="card">

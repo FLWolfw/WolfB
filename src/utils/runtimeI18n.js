@@ -1,6 +1,7 @@
-import { BaseGuildTextChannel, CommandInteraction, Message, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { BaseGuildTextChannel, CommandInteraction, Message, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction, User } from 'discord.js';
 
 const original = new Map();
+const ticketGuildByChannelId = new Map();
 
 const ES = new Map([
   ['Create a Ticket', 'Crear un Ticket'], ['Why are you creating this ticket?', '¿Por qué estás creando este ticket?'], ['Describe your issue...', 'Describe tu problema...'],
@@ -11,7 +12,7 @@ const ES = new Map([
   ['Reopen Ticket', 'Reabrir Ticket'], ['Delete Ticket', 'Eliminar Ticket'], ['Ticket Pinned', 'Ticket Fijado'], ['Ticket Unpinned', 'Ticket No Fijado'],
   ['Your Ticket Has Been Closed', 'Tu Ticket Ha Sido Cerrado'], ['Your ticket', 'Tu ticket'], ['has been closed.', 'ha sido cerrado.'], ['Closed by:', 'Cerrado por:'], ['Closed at:', 'Cerrado el:'],
   ['This ticket has been closed by', 'Este ticket ha sido cerrado por'], ['This ticket has been reopened by', 'Este ticket ha sido reabierto por'], ['has reopened this ticket!', '¡ha reabierto este ticket!'], ['has claimed this ticket!', '¡ha reclamado este ticket!'], ['has unclaimed this ticket!', '¡ha liberado este ticket!'],
-  ['Thanks for creating a ticket!', '¡Gracias por crear un ticket!'], ['Your ticket has been created in', 'Tu ticket ha sido creado en'],
+  ['Thanks for creating a ticket!', '¡Gracias por crear un ticket!'], ['thanks for creating a ticket!', '¡gracias por crear un ticket!'], ['Your ticket has been created in', 'Tu ticket ha sido creado en'],
   ['This ticket has been pinned to the top of the category.', 'Este ticket ha sido fijado en la parte superior de la categoría.'], ['This ticket has been unpinned and moved back to normal position.', 'Este ticket ha dejado de estar fijado y volvió a su posición normal.'],
   ['This ticket has been closed.', 'Este ticket ha sido cerrado.'], ['This ticket will be permanently deleted in 3 seconds.', 'Este ticket será eliminado permanentemente en 3 segundos.'], ['A priority value is required.', 'Se requiere un valor de prioridad.'],
   ['Ticket priority set to', 'Prioridad del ticket establecida en'], ['Ticket priority updated to', 'Prioridad del ticket actualizada a'], ['How was your support experience?', '¿Cómo fue tu experiencia con el soporte?'], ["We'd love to know how we did with", 'Nos gustaría saber cómo lo hicimos con'],
@@ -23,7 +24,7 @@ const ES = new Map([
   ['Ticket Transcript', 'Transcripción del Ticket'], ['Transcript for ticket', 'Transcripción del ticket'], ['Ticket ID', 'ID del Ticket'], ['Channel', 'Canal'], ['Generated', 'Generado'], ['Deleted by:', 'Eliminado por:'], ['Timestamp (UTC)', 'Marca de tiempo (UTC)'], ['Author', 'Autor'], ['Message', 'Mensaje'], ['Transcript', 'Transcripción'],
   ['Not a Ticket Channel', 'No es un canal de Ticket'], ['Permission Denied', 'Permiso Denegado'], ['Request Timeout', 'Tiempo de espera agotado'], ['Rate Limited', 'Límite de solicitudes'], ['Ticket Limit Reached', 'Límite de Tickets Alcanzado'],
   ['You cannot close this ticket.', 'No puedes cerrar este ticket.'], ['You cannot claim tickets.', 'No puedes reclamar tickets.'], ['You cannot unclaim tickets.', 'No puedes liberar tickets.'], ['You cannot reopen tickets.', 'No puedes reabrir tickets.'], ['You cannot delete tickets.', 'No puedes eliminar tickets.'], ['You cannot pin tickets.', 'No puedes fijar tickets.'], ['You cannot change ticket priority.', 'No puedes cambiar la prioridad del ticket.'],
-  ['The permission check took too long. Please try again.', 'La comprobación de permisos tardó demasiado. Inténtalo de nuevo.'], ['Failed to check permissions:', 'No se pudieron comprobar los permisos:'], ['This ticket is already claimed by', 'Este ticket ya ha sido reclamado por'], ['This ticket is not currently closed', 'Este ticket no está cerrado actualmente'], ['This ticket is not currently claimed', 'Este ticket no está reclamado actualmente'],
+  ['The permission check took too long. Please try again.', 'La comprobación de permisos tardó demasiado.'], ['Failed to check permissions:', 'No se pudieron comprobar los permisos:'], ['This ticket is already claimed by', 'Este ticket ya ha sido reclamado por'], ['This ticket is not currently closed', 'Este ticket no está cerrado actualmente'], ['This ticket is not currently claimed', 'Este ticket no está reclamado actualmente'],
   ['You can only unclaim your own tickets or need Manage Channels permission.', 'Solo puedes liberar tus propios tickets o necesitas el permiso Gestionar canales.'], ['Ticket operation failed:', 'La operación del ticket falló:'],
   ['Guild Only', 'Solo servidores'], ['This action can only be used in a server.', 'Esta acción solo se puede utilizar en un servidor.'],
   ['Support Tickets', 'Tickets de Soporte'], ['Open ticket', 'Abrir ticket'], ['Create Ticket', 'Crear Ticket'], ['Cancel', 'Cancelar'], ['Send', 'Enviar'],
@@ -85,6 +86,30 @@ async function translatePayload(payload, client, guildId) {
   return translateObject(toPlain(payload), language);
 }
 
+function findTicketChannelId(payload) {
+  try {
+    const text = JSON.stringify(toPlain(payload));
+    const footerMatch = text.match(/Ticket ID[^0-9]*(\d{15,})/i);
+    if (footerMatch) return footerMatch[1];
+    const feedbackMatch = text.match(/ticket_feedback(?:_decline)?[^0-9]*(\d{15,})/i);
+    if (feedbackMatch) return feedbackMatch[1];
+  } catch {}
+  return null;
+}
+
+async function resolveTicketGuildId(client, ticketChannelId) {
+  if (!client || !ticketChannelId) return null;
+  const cached = ticketGuildByChannelId.get(ticketChannelId);
+  if (cached) return cached;
+  for (const guild of client.guilds?.cache?.values?.() || []) {
+    if (guild.channels?.cache?.has(ticketChannelId)) {
+      ticketGuildByChannelId.set(ticketChannelId, guild.id);
+      return guild.id;
+    }
+  }
+  return null;
+}
+
 function patchMethod(klass, method, handler) {
   if (!klass?.prototype?.[method] || original.has(`${klass.name}.${method}`)) return;
   const key = `${klass.name}.${method}`;
@@ -99,7 +124,15 @@ for (const K of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, 
   patchMethod(K, 'followUp', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
 }
 patchMethod(CommandInteraction, 'showModal', fn => async function(modal, ...args) { return fn.call(this, await translatePayload(modal, this.client, this.guildId), ...args); });
-patchMethod(BaseGuildTextChannel, 'send', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
+patchMethod(BaseGuildTextChannel, 'send', fn => async function(payload, ...args) {
+  ticketGuildByChannelId.set(this.id, this.guildId);
+  return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args);
+});
 patchMethod(Message, 'edit', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
+patchMethod(User, 'send', fn => async function(payload, ...args) {
+  const ticketChannelId = findTicketChannelId(payload);
+  const ticketGuildId = await resolveTicketGuildId(this.client, ticketChannelId);
+  return fn.call(this, await translatePayload(payload, this.client, ticketGuildId), ...args);
+});
 
 console.log('[i18n] Runtime server-language translation enabled');

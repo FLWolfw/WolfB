@@ -1,6 +1,7 @@
 import es from './es.js';
 import en from './en.js';
 import { helpCategories } from './helpCategories.js';
+import { ticketFeedbackTranslations } from './ticketFeedback.js';
 
 const languages = { es, en };
 
@@ -11,6 +12,7 @@ for (const language of ['es', 'en']) {
   languages[language].wolf.cmd ??= {};
   languages[language].wolf.cmd.help ??= {};
   languages[language].wolf.cmd.help.categories = helpCategories[language];
+  languages[language].wolf.ticketFeedback = ticketFeedbackTranslations[language];
 }
 
 export function t(language, path) {

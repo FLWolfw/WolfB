@@ -12,30 +12,115 @@ const original = new Map();
 const ticketGuildByChannelId = new Map();
 
 const ES = new Map([
-  ['Create a Ticket', 'Crear un Ticket'], ['Why are you creating this ticket?', '¿Por qué estás creando este ticket?'], ['Describe your issue...', 'Describe tu problema...'],
-  ['Close Ticket', 'Cerrar Ticket'], ['Reason for closing (optional)', 'Motivo del cierre (opcional)'], ['Add an optional reason for closing this ticket...', 'Añade un motivo opcional para cerrar este ticket...'],
-  ['Claim', 'Reclamar'], ['Claimed', 'Reclamado'], ['Unclaim', 'Liberar'], ['Pin', 'Fijar'], ['Low', 'Baja'], ['Medium', 'Media'], ['High', 'Alta'], ['Urgent', 'Urgente'], ['None', 'Ninguna'],
-  ['Ticket Created', 'Ticket Creado'], ['Ticket Closed', 'Ticket Cerrado'], ['Ticket Reopened', 'Ticket Reabierto'], ['Ticket Deleted', 'Ticket Eliminado'], ['Ticket Claimed', 'Ticket Reclamado'], ['Ticket Unclaimed', 'Ticket Liberado'],
-  ['Priority Updated', 'Prioridad Actualizada'], ['Status', 'Estado'], ['Open', 'Abierto'], ['Closed', 'Cerrado'], ['Claimed By', 'Reclamado por'], ['Reclaimed By', 'Reclamado por'], ['Not claimed', 'No reclamado'], ['Created', 'Creado'], ['Reason', 'Motivo'], ['Priority', 'Prioridad'],
-  ['Reopen Ticket', 'Reabrir Ticket'], ['Delete Ticket', 'Eliminar Ticket'], ['Ticket Pinned', 'Ticket Fijado'], ['Ticket Unpinned', 'Ticket No Fijado'],
-  ['Your Ticket Has Been Closed', 'Tu Ticket Ha Sido Cerrado'], ['Your ticket', 'Tu ticket'], ['has been closed.', 'ha sido cerrado.'], ['Closed by:', 'Cerrado por:'], ['Closed at:', 'Cerrado el:'],
-  ['This ticket has been closed by', 'Este ticket ha sido cerrado por'], ['This ticket has been reopened by', 'Este ticket ha sido reabierto por'], ['has reopened this ticket!', '¡ha reabierto este ticket!'], ['has claimed this ticket!', '¡ha reclamado este ticket!'], ['has unclaimed this ticket!', '¡ha liberado este ticket!'],
-  ['Thanks for creating a ticket!', '¡Gracias por crear un ticket!'], ['thanks for creating a ticket!', '¡gracias por crear un ticket!'], ['Your ticket has been created in', 'Tu ticket ha sido creado en'],
-  ['This ticket has been pinned to the top of the category.', 'Este ticket ha sido fijado en la parte superior de la categoría.'], ['This ticket has been unpinned and moved back to normal position.', 'Este ticket ha dejado de estar fijado y volvió a su posición normal.'],
-  ['This ticket has been closed.', 'Este ticket ha sido cerrado.'], ['This ticket will be permanently deleted in 3 seconds.', 'Este ticket será eliminado permanentemente en 3 segundos.'], ['A priority value is required.', 'Se requiere un valor de prioridad.'],
-  ['Ticket priority set to', 'Prioridad del ticket establecida en'], ['Ticket priority updated to', 'Prioridad del ticket actualizada a'], ['How was your support experience?', '¿Cómo fue tu experiencia con el soporte?'], ["We'd love to know how we did with", 'Nos gustaría saber qué tal lo hicimos con'],
-  ['Select a rating below — it only takes a second!', 'Selecciona una valoración; solo tardarás un segundo.'], ['Your feedback helps us improve.', 'Tus comentarios nos ayudan a mejorar.'], ['No thanks', 'No, gracias'],
+  // Exact ticket phrases MUST come before their smaller fragments.
+  ['This ticket has been closed.', 'Este ticket ha sido cerrado.'],
+  ['This ticket has been closed by', 'Este ticket ha sido cerrado por'],
+  ['This ticket has been reopened by', 'Este ticket ha sido reabierto por'],
+  ['Your Ticket Has Been Closed', 'Tu Ticket Ha Sido Cerrado'],
+  ['How was your support experience?', '¿Cómo fue tu experiencia con el soporte?'],
+  ["We'd love to know how we did with", 'Nos gustaría saber qué tal lo hicimos con'],
+  ['Select a rating below — it only takes a second!', '¡Selecciona una valoración! Solo te tomará un segundo.'],
+  ['Your feedback helps us improve.', 'Tu opinión nos ayuda a mejorar.'],
+  ['No thanks', 'No, gracias'],
+
+  ['Create a Ticket', 'Crear un Ticket'],
+  ['Why are you creating this ticket?', '¿Por qué estás creando este ticket?'],
+  ['Describe your issue...', 'Describe tu problema...'],
+  ['Close Ticket', 'Cerrar Ticket'],
+  ['Reason for closing (optional)', 'Motivo del cierre (opcional)'],
+  ['Add an optional reason for closing this ticket...', 'Añade un motivo opcional para cerrar este ticket...'],
+  ['Claim', 'Reclamar'],
+  ['Claimed', 'Reclamado'],
+  ['Unclaim', 'Liberar'],
+  ['Pin', 'Fijar'],
+  ['Low', 'Baja'],
+  ['Medium', 'Media'],
+  ['High', 'Alta'],
+  ['Urgent', 'Urgente'],
+  ['None', 'Ninguna'],
+  ['Ticket Created', 'Ticket Creado'],
+  ['Ticket Closed', 'Ticket Cerrado'],
+  ['Ticket Reopened', 'Ticket Reabierto'],
+  ['Ticket Deleted', 'Ticket Eliminado'],
+  ['Ticket Claimed', 'Ticket Reclamado'],
+  ['Ticket Unclaimed', 'Ticket Liberado'],
+  ['Priority Updated', 'Prioridad Actualizada'],
+  ['Status', 'Estado'],
+  ['Open', 'Abierto'],
+  ['Closed', 'Cerrado'],
+  ['Claimed By', 'Reclamado por'],
+  ['Reclaimed By', 'Reclamado por'],
+  ['Not claimed', 'No reclamado'],
+  ['Created', 'Creado'],
+  ['Reason', 'Motivo'],
+  ['Priority', 'Prioridad'],
+  ['Reopen Ticket', 'Reabrir Ticket'],
+  ['Delete Ticket', 'Eliminar Ticket'],
+  ['Ticket Pinned', 'Ticket Fijado'],
+  ['Ticket Unpinned', 'Ticket No Fijado'],
+  ['Your ticket', 'Tu ticket'],
+  ['has been closed.', 'ha sido cerrado.'],
+  ['Closed by:', 'Cerrado por:'],
+  ['Closed at:', 'Cerrado el:'],
+  ['has reopened this ticket!', '¡ha reabierto este ticket!'],
+  ['has claimed this ticket!', '¡ha reclamado este ticket!'],
+  ['has unclaimed this ticket!', '¡ha liberado este ticket!'],
+  ['Thanks for creating a ticket!', '¡Gracias por crear un ticket!'],
+  ['thanks for creating a ticket!', '¡gracias por crear un ticket!'],
+  ['Your ticket has been created in', 'Tu ticket ha sido creado en'],
+  ['This ticket has been pinned to the top of the category.', 'Este ticket ha sido fijado en la parte superior de la categoría.'],
+  ['This ticket has been unpinned and moved back to normal position.', 'Este ticket ha dejado de estar fijado y volvió a su posición normal.'],
+  ['This ticket will be permanently deleted in 3 seconds.', 'Este ticket será eliminado permanentemente en 3 segundos.'],
+  ['A priority value is required.', 'Se requiere un valor de prioridad.'],
+  ['Ticket priority set to', 'Prioridad del ticket establecida en'],
+  ['Ticket priority updated to', 'Prioridad del ticket actualizada a'],
   ['Thank you for using our support system! If you have any further questions, feel free to create a new ticket.', '¡Gracias por utilizar nuestro sistema de soporte! Si tienes más preguntas, puedes crear un nuevo ticket.'],
-  ['You have reached the maximum number of open tickets', 'Has alcanzado el número máximo de tickets abiertos'], ['Please close your existing tickets before creating a new one.', 'Cierra tus tickets existentes antes de crear uno nuevo.'], ['Current Tickets:', 'Tickets actuales:'],
-  ['Failed to create ticket. Please try again in a moment.', 'No se pudo crear el ticket. Inténtalo de nuevo en un momento.'], ['Failed to close ticket. Please try again in a moment.', 'No se pudo cerrar el ticket. Inténtalo de nuevo en un momento.'], ['Failed to reopen ticket. Please try again in a moment.', 'No se pudo reabrir el ticket. Inténtalo de nuevo en un momento.'],
-  ['Failed to delete ticket. Please try again in a moment.', 'No se pudo eliminar el ticket. Inténtalo de nuevo en un momento.'], ['Failed to claim ticket. Please try again in a moment.', 'No se pudo reclamar el ticket. Inténtalo de nuevo en un momento.'], ['Failed to unclaim ticket. Please try again in a moment.', 'No se pudo liberar el ticket. Inténtalo de nuevo en un momento.'], ['Failed to update ticket priority. Please try again in a moment.', 'No se pudo actualizar la prioridad del ticket. Inténtalo de nuevo en un momento.'],
-  ['Ticket Transcript', 'Transcripción del Ticket'], ['Transcript for ticket', 'Transcripción del ticket'], ['Ticket ID', 'ID del Ticket'], ['Channel', 'Canal'], ['Generated', 'Generado'], ['Deleted by:', 'Eliminado por:'], ['Timestamp (UTC)', 'Marca de tiempo (UTC)'], ['Author', 'Autor'], ['Message', 'Mensaje'], ['Transcript', 'Transcripción'],
-  ['Not a Ticket Channel', 'No es un canal de Ticket'], ['Permission Denied', 'Permiso Denegado'], ['Request Timeout', 'Tiempo de espera agotado'], ['Rate Limited', 'Límite de solicitudes'], ['Ticket Limit Reached', 'Límite de Tickets Alcanzado'],
-  ['You cannot close this ticket.', 'No puedes cerrar este ticket.'], ['You cannot claim tickets.', 'No puedes reclamar tickets.'], ['You cannot unclaim tickets.', 'No puedes liberar tickets.'], ['You cannot reopen tickets.', 'No puedes reabrir tickets.'], ['You cannot delete tickets.', 'No puedes eliminar tickets.'], ['You cannot pin tickets.', 'No puedes fijar tickets.'], ['You cannot change ticket priority.', 'No puedes cambiar la prioridad del ticket.'],
-  ['The permission check took too long. Please try again.', 'La comprobación de permisos tardó demasiado.'], ['Failed to check permissions:', 'No se pudieron comprobar los permisos:'], ['This ticket is already claimed by', 'Este ticket ya ha sido reclamado por'], ['This ticket is not currently closed', 'Este ticket no está cerrado actualmente'], ['This ticket is not currently claimed', 'Este ticket no está reclamado actualmente'],
-  ['You can only unclaim your own tickets or need Manage Channels permission.', 'Solo puedes liberar tus propios tickets o necesitas el permiso Gestionar canales.'], ['Ticket operation failed:', 'La operación del ticket falló:'],
-  ['Guild Only', 'Solo servidores'], ['This action can only be used in a server.', 'Esta acción solo se puede utilizar en un servidor.'],
-  ['Support Tickets', 'Tickets de Soporte'], ['Open ticket', 'Abrir ticket'], ['Create Ticket', 'Crear Ticket'], ['Cancel', 'Cancelar'], ['Send', 'Enviar'],
+  ['You have reached the maximum number of open tickets', 'Has alcanzado el número máximo de tickets abiertos'],
+  ['Please close your existing tickets before creating a new one.', 'Cierra tus tickets existentes antes de crear uno nuevo.'],
+  ['Current Tickets:', 'Tickets actuales:'],
+  ['Failed to create ticket. Please try again in a moment.', 'No se pudo crear el ticket. Inténtalo de nuevo en un momento.'],
+  ['Failed to close ticket. Please try again in a moment.', 'No se pudo cerrar el ticket. Inténtalo de nuevo en un momento.'],
+  ['Failed to reopen ticket. Please try again in a moment.', 'No se pudo reabrir el ticket. Inténtalo de nuevo en un momento.'],
+  ['Failed to delete ticket. Please try again in a moment.', 'No se pudo eliminar el ticket. Inténtalo de nuevo en un momento.'],
+  ['Failed to claim ticket. Please try again in a moment.', 'No se pudo reclamar el ticket. Inténtalo de nuevo en un momento.'],
+  ['Failed to unclaim ticket. Please try again in a moment.', 'No se pudo liberar el ticket. Inténtalo de nuevo en un momento.'],
+  ['Failed to update ticket priority. Please try again in a moment.', 'No se pudo actualizar la prioridad del ticket. Inténtalo de nuevo en un momento.'],
+  ['Ticket Transcript', 'Transcripción del Ticket'],
+  ['Transcript for ticket', 'Transcripción del ticket'],
+  ['Ticket ID', 'ID del Ticket'],
+  ['Channel', 'Canal'],
+  ['Generated', 'Generado'],
+  ['Deleted by:', 'Eliminado por:'],
+  ['Timestamp (UTC)', 'Marca de tiempo (UTC)'],
+  ['Author', 'Autor'],
+  ['Message', 'Mensaje'],
+  ['Transcript', 'Transcripción'],
+  ['Not a Ticket Channel', 'No es un canal de Ticket'],
+  ['Permission Denied', 'Permiso Denegado'],
+  ['Request Timeout', 'Tiempo de espera agotado'],
+  ['Rate Limited', 'Límite de solicitudes'],
+  ['Ticket Limit Reached', 'Límite de Tickets Alcanzado'],
+  ['You cannot close this ticket.', 'No puedes cerrar este ticket.'],
+  ['You cannot claim tickets.', 'No puedes reclamar tickets.'],
+  ['You cannot unclaim tickets.', 'No puedes liberar tickets.'],
+  ['You cannot reopen tickets.', 'No puedes reabrir tickets.'],
+  ['You cannot delete tickets.', 'No puedes eliminar tickets.'],
+  ['You cannot pin tickets.', 'No puedes fijar tickets.'],
+  ['You cannot change ticket priority.', 'No puedes cambiar la prioridad del ticket.'],
+  ['The permission check took too long. Please try again.', 'La comprobación de permisos tardó demasiado.'],
+  ['Failed to check permissions:', 'No se pudieron comprobar los permisos:'],
+  ['This ticket is already claimed by', 'Este ticket ya ha sido reclamado por'],
+  ['This ticket is not currently closed', 'Este ticket no está cerrado actualmente'],
+  ['This ticket is not currently claimed', 'Este ticket no está reclamado actualmente'],
+  ['You can only unclaim your own tickets or need Manage Channels permission.', 'Solo puedes liberar tus propios tickets o necesitas el permiso Gestionar canales.'],
+  ['Ticket operation failed:', 'La operación del ticket falló:'],
+  ['Guild Only', 'Solo servidores'],
+  ['This action can only be used in a server.', 'Esta acción solo se puede utilizar en un servidor.'],
+  ['Support Tickets', 'Tickets de Soporte'],
+  ['Open ticket', 'Abrir ticket'],
+  ['Create Ticket', 'Crear Ticket'],
+  ['Cancel', 'Cancelar'],
+  ['Send', 'Enviar'],
 ]);
 
 function normalizeLanguage(language) {
@@ -96,31 +181,30 @@ async function translateModal(modal, client, guildId) {
   const language = await getLanguage(client, guildId);
   if (language !== 'es' || !modal) return modal;
 
-  // Mutate the original builders only; never convert the modal/components to
-  // plain objects. This preserves Discord.js component type metadata.
-  if (typeof modal.data?.title === 'string') {
-    modal.setTitle(translateText(modal.data.title, language));
-  }
-
+  // Keep Discord.js builders intact. Converting them to plain objects breaks
+  // modal validation because Discord requires component type metadata.
+  if (typeof modal.data?.title === 'string') modal.setTitle(translateText(modal.data.title, language));
   for (const row of modal.components || []) {
     for (const input of row?.components || []) {
       if (typeof input?.data?.label === 'string') input.setLabel(translateText(input.data.label, language));
       if (typeof input?.data?.placeholder === 'string') input.setPlaceholder(translateText(input.data.placeholder, language));
     }
   }
-
   return modal;
 }
 
-function findTicketChannelId(payload) {
+function findTicketContext(payload) {
   try {
-    const text = JSON.stringify(toPlain(payload));
+    const plain = toPlain(payload);
+    const text = JSON.stringify(plain);
     const footerMatch = text.match(/(?:Ticket ID|ID del Ticket)[^0-9]*(\d{15,})/i);
-    if (footerMatch) return footerMatch[1];
-    const feedbackMatch = text.match(/ticket_feedback(?:_decline)?[^0-9]*(\d{15,})/i);
-    if (feedbackMatch) return feedbackMatch[1];
+    if (footerMatch) return { channelId: footerMatch[1] };
+
+    // Feedback button custom IDs contain the guild ID and ticket channel ID.
+    const feedbackMatch = text.match(/ticket_feedback(?:_decline)?:([0-9]{15,}):([0-9]{15,})/i);
+    if (feedbackMatch) return { guildId: feedbackMatch[1], channelId: feedbackMatch[2] };
   } catch {}
-  return null;
+  return {};
 }
 
 async function resolveTicketGuildId(client, ticketChannelId) {
@@ -149,19 +233,21 @@ for (const K of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, 
   patchMethod(K, 'editReply', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
   patchMethod(K, 'followUp', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
   patchMethod(K, 'update', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
-  patchMethod(K, 'showModal', fn => async function(modal, ...args) {
-    return fn.call(this, await translateModal(modal, this.client, this.guildId), ...args);
-  });
+  patchMethod(K, 'showModal', fn => async function(modal, ...args) { return fn.call(this, await translateModal(modal, this.client, this.guildId), ...args); });
 }
 
 patchMethod(BaseGuildTextChannel, 'send', fn => async function(payload, ...args) {
   ticketGuildByChannelId.set(this.id, this.guildId);
   return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args);
 });
-patchMethod(Message, 'edit', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
+
+patchMethod(Message, 'edit', fn => async function(payload, ...args) {
+  return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args);
+});
+
 patchMethod(User, 'send', fn => async function(payload, ...args) {
-  const ticketChannelId = findTicketChannelId(payload);
-  const ticketGuildId = await resolveTicketGuildId(this.client, ticketChannelId);
+  const context = findTicketContext(payload);
+  const ticketGuildId = context.guildId || await resolveTicketGuildId(this.client, context.channelId);
   return fn.call(this, await translatePayload(payload, this.client, ticketGuildId), ...args);
 });
 

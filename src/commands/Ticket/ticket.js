@@ -114,7 +114,12 @@ export default {
                     commandName: 'ticket'
                 });
                 return await InteractionHelper.safeEditReply(interaction, {
-                    embeds: [errorEmbed(t(lang, 'wolf.cmd.ticket.permDenied'), t(lang, 'wolf.cmd.ticket.permSetup'))],
+                    embeds: [createEmbed({
+                        title: `❌ ${t(lang, 'wolf.cmd.ticket.permDenied')}`,
+                        description: t(lang, 'wolf.cmd.ticket.permSetup'),
+                        color: 'error',
+                        timestamp: true,
+                    })],
                 });
             }
 
@@ -318,6 +323,3 @@ description: panelMessage,
         }
     }
 };
-
-
-

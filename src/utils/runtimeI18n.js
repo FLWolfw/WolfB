@@ -1,4 +1,14 @@
-import { BaseGuildTextChannel, CommandInteraction, Message, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction, User } from 'discord.js';
+import {
+  BaseGuildTextChannel,
+  CommandInteraction,
+  Message,
+  ModalSubmitInteraction,
+  ButtonInteraction,
+  StringSelectMenuInteraction,
+  User,
+  ModalBuilder,
+  TextInputBuilder,
+} from 'discord.js';
 
 const original = new Map();
 const ticketGuildByChannelId = new Map();
@@ -76,26 +86,11 @@ function translateObject(value, language) {
   return out;
 }
 
-async function translatePayload(payload, client, guildId, preserveComponents = false) {
+async function translatePayload(payload, client, guildId) {
   const language = await getLanguage(client, guildId);
   if (language !== 'es') return payload;
   if (typeof payload === 'string') return translateText(payload, language);
   if (!payload || typeof payload !== 'object') return payload;
-
-  // Modals/components must retain Discord's component `type` discriminator.
-  // Rebuilding them as plain objects breaks showModal with TAG_FIELD_MISSING.
-  if (preserveComponents) {
-    const plain = toPlain(payload);
-    const translated = translateObject(plain, language);
-    if (Array.isArray(translated?.components)) {
-      translated.components = translated.components.map(component => {
-        if (!component || typeof component !== 'object') return component;
-        return { ...component, type: component.type ?? 1 };
-      });
-    }
-    return translated;
-  }
-
   return translateObject(toPlain(payload), language);
 }
 
@@ -135,14 +130,22 @@ for (const K of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, 
   patchMethod(K, 'reply', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
   patchMethod(K, 'editReply', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
   patchMethod(K, 'followUp', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
+  patchMethod(K, 'update', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
+  // showModal is intentionally not rebuilt. Modal builders keep their Discord.js internals.
+  patchMethod(K, 'showModal', fn => async function(modal, ...args) { return fn.call(this, modal, ...args); });
 }
 
-for (const K of [CommandInteraction, ModalSubmitInteraction, ButtonInteraction, StringSelectMenuInteraction]) {
-  // showModal is intentionally NOT translated/rebuilt. Discord requires the
-  // component type discriminator and the original builders already contain it.
-  patchMethod(K, 'showModal', fn => async function(modal, ...args) { return fn.call(this, modal, ...args); });
-  patchMethod(K, 'update', fn => async function(payload, ...args) { return fn.call(this, await translatePayload(payload, this.client, this.guildId), ...args); });
-}
+// Translate modal text at the builder level while preserving the original
+// ModalBuilder/TextInputBuilder objects and Discord's required component types.
+patchMethod(ModalBuilder, 'setTitle', fn => function(value, ...args) {
+  return fn.call(this, translateText(value, 'es'), ...args);
+});
+patchMethod(TextInputBuilder, 'setLabel', fn => function(value, ...args) {
+  return fn.call(this, translateText(value, 'es'), ...args);
+});
+patchMethod(TextInputBuilder, 'setPlaceholder', fn => function(value, ...args) {
+  return fn.call(this, translateText(value, 'es'), ...args);
+});
 
 patchMethod(BaseGuildTextChannel, 'send', fn => async function(payload, ...args) {
   ticketGuildByChannelId.set(this.id, this.guildId);

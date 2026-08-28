@@ -32,39 +32,25 @@ function getSession(guildId) {
       ffmpegProcess: null,
       starting: false,
       generation: 0,
-      skipRequested: false,
+      transitioning: false,
     };
 
     player.on(AudioPlayerStatus.Idle, () => {
-      // A manual skip/stop invalidates the old playback generation. Advance
-      // only after the stop has fully propagated through the audio player.
-      if (session.skipRequested) {
-        session.skipRequested = false;
-        setImmediate(() => {
-          playNext(guildId).catch((error) => logger.error('music next-track error', {
-            guildId,
-            error: error?.message,
-          }));
-        });
-        return;
-      }
-
+      if (session.transitioning) return;
       if (session.current) session.current = null;
       playNext(guildId).catch((error) => logger.error('music next-track error', {
         guildId,
         error: error?.message,
+        stack: error?.stack,
       }));
     });
 
     player.on('error', (error) => {
-      logger.error('music player error', {
-        guildId,
-        error: error?.message,
-        stack: error?.stack,
-      });
+      logger.error('music player error', { guildId, error: error?.message, stack: error?.stack });
       stopProcesses(session);
       session.current = null;
       session.generation += 1;
+      session.transitioning = false;
       playNext(guildId).catch((err) => logger.error('music recovery error', {
         guildId,
         error: err?.message,
@@ -164,13 +150,12 @@ async function ensureConnection(guild, channel) {
 
 async function playNext(guildId) {
   const session = sessions.get(guildId);
-  if (!session || session.starting || session.queue.length === 0) return;
+  if (!session || session.starting || session.transitioning || session.queue.length === 0) return;
 
   const item = session.queue.shift();
   const generation = session.generation;
   session.starting = true;
   session.current = item;
-  session.skipRequested = false;
   stopProcesses(session);
 
   try {
@@ -179,9 +164,6 @@ async function playNext(guildId) {
     if (!channel) throw new Error('El canal de voz ya no existe.');
 
     const connection = await ensureConnection(guild, channel);
-
-    // The track may have been skipped while the voice connection was
-    // becoming ready. Never start an invalidated track.
     if (session.current !== item || session.generation !== generation) return;
 
     connection.subscribe(session.player);
@@ -195,13 +177,8 @@ async function playNext(guildId) {
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
     const ffmpeg = spawn('ffmpeg', [
-      '-hide_banner',
-      '-loglevel', 'error',
-      '-i', 'pipe:0',
-      '-f', 's16le',
-      '-ar', '48000',
-      '-ac', '2',
-      'pipe:1',
+      '-hide_banner', '-loglevel', 'error',
+      '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1',
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
     session.ytProcess = yt;
@@ -214,14 +191,8 @@ async function playNext(guildId) {
     ffmpeg.stderr.setEncoding('utf8');
     ffmpeg.stderr.on('data', (chunk) => { ffmpegError += chunk; });
 
-    yt.on('error', (error) => {
-      logger.error('yt-dlp process error', { guildId, error: error?.message, stack: error?.stack });
-      console.error(`[MUSIC][yt-dlp process error][guild:${guildId}]`, error);
-    });
-    ffmpeg.on('error', (error) => {
-      logger.error('ffmpeg process error', { guildId, error: error?.message, stack: error?.stack });
-      console.error(`[MUSIC][ffmpeg process error][guild:${guildId}]`, error);
-    });
+    yt.on('error', (error) => console.error(`[MUSIC][yt-dlp process error][guild:${guildId}]`, error));
+    ffmpeg.on('error', (error) => console.error(`[MUSIC][ffmpeg process error][guild:${guildId}]`, error));
 
     yt.stdout.pipe(ffmpeg.stdin);
     const resource = createAudioResource(ffmpeg.stdout, {
@@ -233,7 +204,6 @@ async function playNext(guildId) {
     yt.once('close', (code) => {
       if (code !== 0 && session.current === item && session.generation === generation) {
         const detail = ytError.trim().slice(-4000) || 'yt-dlp produced no stderr output';
-        logger.error(`yt-dlp playback failed [code ${code}]\n${detail}`, { guildId });
         console.error(`\n========== [MUSIC] YT-DLP PLAYBACK FAILED ==========`);
         console.error(`Guild: ${guildId}`);
         console.error(`Exit code: ${code}`);
@@ -246,7 +216,6 @@ async function playNext(guildId) {
     ffmpeg.once('close', (code) => {
       if (code !== 0 && session.current === item && session.generation === generation) {
         const detail = ffmpegError.trim().slice(-4000) || 'ffmpeg produced no stderr output';
-        logger.error(`ffmpeg playback failed [code ${code}]\n${detail}`, { guildId });
         console.error(`\n========== [MUSIC] FFMPEG PLAYBACK FAILED ==========`);
         console.error(`Guild: ${guildId}`);
         console.error(`Exit code: ${code}`);
@@ -305,25 +274,24 @@ export function skip(guildId) {
   const session = sessions.get(guildId);
   if (!session?.current && !session?.starting) return false;
 
-  // Invalidate the current playback immediately. This prevents an in-flight
-  // playNext() from spawning the old stream after skip was pressed.
+  const nextExists = session.queue.length > 0;
+  session.transitioning = true;
   session.generation += 1;
   session.current = null;
-  session.skipRequested = true;
   stopProcesses(session);
   session.player.stop(true);
 
-  // Do not depend solely on the Idle event; if the player was already idle,
-  // advance explicitly. playNext() has its own starting guard.
-  setImmediate(() => {
+  setTimeout(() => {
     const latest = sessions.get(guildId);
-    if (!latest || latest.starting || latest.queue.length === 0) return;
+    if (!latest) return;
+    latest.transitioning = false;
+    if (!nextExists || latest.queue.length === 0) return;
     playNext(guildId).catch((error) => logger.error('music skip-next error', {
       guildId,
       error: error?.message,
       stack: error?.stack,
     }));
-  });
+  }, 350);
 
   return true;
 }
@@ -331,12 +299,18 @@ export function skip(guildId) {
 export function stop(guildId) {
   const session = sessions.get(guildId);
   if (!session) return false;
+  session.transitioning = true;
   session.generation += 1;
   session.queue = [];
   session.current = null;
-  session.skipRequested = true;
   stopProcesses(session);
-  return session.player.stop(true);
+  const stopped = session.player.stop(true);
+  setTimeout(() => {
+    const latest = sessions.get(guildId);
+    if (latest) latest.transitioning = false;
+  }, 350);
+  // Keep the voice connection alive; /voice join owns the 24/7 connection.
+  return stopped;
 }
 
 export function destroy(guildId) {

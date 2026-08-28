@@ -11,8 +11,8 @@
     "migrate:check": "node scripts/migrate.js check",
     "migrate:status": "node scripts/migrate.js status",
     "backup:db": "node scripts/backup.js",
-    "restore:db": "node scripts/restore.js",
-    "backup:drill": "node scripts/restore-drill.js"
+    "restore:drill": "node scripts/restore-drill.js",
+    "restore": "node scripts/restore.js"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.1",
@@ -29,6 +29,6 @@
     "zod": "^3.25.76"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

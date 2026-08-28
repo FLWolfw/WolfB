@@ -31,17 +31,47 @@ function getSession(guildId) {
       ytProcess: null,
       ffmpegProcess: null,
       starting: false,
+      generation: 0,
+      skipRequested: false,
     };
+
     player.on(AudioPlayerStatus.Idle, () => {
+      // A manual skip/stop invalidates the old playback generation. Advance
+      // only after the stop has fully propagated through the audio player.
+      if (session.skipRequested) {
+        session.skipRequested = false;
+        setImmediate(() => {
+          playNext(guildId).catch((error) => logger.error('music next-track error', {
+            guildId,
+            error: error?.message,
+          }));
+        });
+        return;
+      }
+
       if (session.current) session.current = null;
-      playNext(guildId).catch((error) => logger.error('music next-track error', { guildId, error: error?.message }));
+      playNext(guildId).catch((error) => logger.error('music next-track error', {
+        guildId,
+        error: error?.message,
+      }));
     });
+
     player.on('error', (error) => {
-      logger.error('music player error', { guildId, error: error?.message, stack: error?.stack });
+      logger.error('music player error', {
+        guildId,
+        error: error?.message,
+        stack: error?.stack,
+      });
       stopProcesses(session);
       session.current = null;
-      playNext(guildId).catch((err) => logger.error('music recovery error', { guildId, error: err?.message, stack: err?.stack }));
+      session.generation += 1;
+      playNext(guildId).catch((err) => logger.error('music recovery error', {
+        guildId,
+        error: err?.message,
+        stack: err?.stack,
+      }));
     });
+
     sessions.set(guildId, session);
   }
   return session;
@@ -137,15 +167,23 @@ async function playNext(guildId) {
   if (!session || session.starting || session.queue.length === 0) return;
 
   const item = session.queue.shift();
+  const generation = session.generation;
   session.starting = true;
   session.current = item;
+  session.skipRequested = false;
   stopProcesses(session);
 
   try {
     const guild = item.guild;
     const channel = guild.channels.cache.get(item.channelId);
     if (!channel) throw new Error('El canal de voz ya no existe.');
+
     const connection = await ensureConnection(guild, channel);
+
+    // The track may have been skipped while the voice connection was
+    // becoming ready. Never start an invalidated track.
+    if (session.current !== item || session.generation !== generation) return;
+
     connection.subscribe(session.player);
 
     const yt = spawn('yt-dlp', [
@@ -193,7 +231,7 @@ async function playNext(guildId) {
     session.player.play(resource);
 
     yt.once('close', (code) => {
-      if (code !== 0 && session.current === item) {
+      if (code !== 0 && session.current === item && session.generation === generation) {
         const detail = ytError.trim().slice(-4000) || 'yt-dlp produced no stderr output';
         logger.error(`yt-dlp playback failed [code ${code}]\n${detail}`, { guildId });
         console.error(`\n========== [MUSIC] YT-DLP PLAYBACK FAILED ==========`);
@@ -204,8 +242,9 @@ async function playNext(guildId) {
         session.player.stop(true);
       }
     });
+
     ffmpeg.once('close', (code) => {
-      if (code !== 0 && session.current === item) {
+      if (code !== 0 && session.current === item && session.generation === generation) {
         const detail = ffmpegError.trim().slice(-4000) || 'ffmpeg produced no stderr output';
         logger.error(`ffmpeg playback failed [code ${code}]\n${detail}`, { guildId });
         console.error(`\n========== [MUSIC] FFMPEG PLAYBACK FAILED ==========`);
@@ -217,15 +256,17 @@ async function playNext(guildId) {
       }
     });
   } catch (error) {
-    logger.error('music start error', {
-      guildId,
-      error: error?.message || String(error),
-      stack: error?.stack,
-      name: error?.name,
-    });
-    stopProcesses(session);
-    session.current = null;
-    await playNext(guildId);
+    if (session.current === item && session.generation === generation) {
+      logger.error('music start error', {
+        guildId,
+        error: error?.message || String(error),
+        stack: error?.stack,
+        name: error?.name,
+      });
+      stopProcesses(session);
+      session.current = null;
+      await playNext(guildId);
+    }
   } finally {
     session.starting = false;
   }
@@ -238,7 +279,7 @@ export async function enqueue({ guild, channel, query, requestedBy }) {
   track.requestedBy = requestedBy;
 
   const session = getSession(guild.id);
-  const wasPlaying = Boolean(session.current);
+  const wasPlaying = Boolean(session.current) || session.starting;
   session.queue.push(track);
   if (!wasPlaying && !session.starting) await playNext(guild.id);
   return { track, position: session.queue.length + (wasPlaying ? 1 : 0), session };
@@ -262,21 +303,38 @@ export function resume(guildId) {
 
 export function skip(guildId) {
   const session = sessions.get(guildId);
-  if (!session?.current) return false;
+  if (!session?.current && !session?.starting) return false;
 
-  // Clear the current track BEFORE stopping the player. Otherwise the Idle
-  // event can start the next track and player.stop(true) can immediately
-  // stop that newly-started track as well.
+  // Invalidate the current playback immediately. This prevents an in-flight
+  // playNext() from spawning the old stream after skip was pressed.
+  session.generation += 1;
   session.current = null;
+  session.skipRequested = true;
   stopProcesses(session);
-  return session.player.stop(true);
+  session.player.stop(true);
+
+  // Do not depend solely on the Idle event; if the player was already idle,
+  // advance explicitly. playNext() has its own starting guard.
+  setImmediate(() => {
+    const latest = sessions.get(guildId);
+    if (!latest || latest.starting || latest.queue.length === 0) return;
+    playNext(guildId).catch((error) => logger.error('music skip-next error', {
+      guildId,
+      error: error?.message,
+      stack: error?.stack,
+    }));
+  });
+
+  return true;
 }
 
 export function stop(guildId) {
   const session = sessions.get(guildId);
   if (!session) return false;
+  session.generation += 1;
   session.queue = [];
   session.current = null;
+  session.skipRequested = true;
   stopProcesses(session);
   return session.player.stop(true);
 }

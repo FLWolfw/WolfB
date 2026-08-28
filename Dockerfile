@@ -2,10 +2,11 @@ FROM node:22-alpine
 
 WORKDIR /usr/src/app
 
-# Music runtime: yt-dlp resolves/searches media sources and ffmpeg converts
-# the audio stream into a format Discord's voice player can consume.
-# Deno + yt-dlp-ejs are required by current YouTube extraction flows.
-RUN apk add --no-cache ffmpeg yt-dlp deno yt-dlp-ejs
+# Music runtime: use a current PyPI yt-dlp build because the Alpine
+# repository version can lag behind YouTube extractor changes.
+# Deno + yt-dlp-ejs provide the JavaScript challenge runtime for YouTube.
+RUN apk add --no-cache ffmpeg deno python3 py3-pip \
+  && python3 -m pip install --break-system-packages --no-cache-dir -U "yt-dlp[default]"
 
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund

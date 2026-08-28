@@ -14,6 +14,12 @@ import { logger } from '../utils/logger.js';
 
 const sessions = new Map();
 
+const YTDLP_BASE_ARGS = [
+  '--js-runtimes', 'deno',
+  '--remote-components', 'ejs:npm',
+  '--no-warnings',
+];
+
 function getSession(guildId) {
   let session = sessions.get(guildId);
   if (!session) {
@@ -70,7 +76,7 @@ function runYtDlp(args) {
     child.once('error', reject);
     child.once('close', (code) => {
       if (code === 0) resolve(stdout.trim());
-      else reject(new Error(stderr.trim().slice(-2000) || `yt-dlp exited with code ${code}`));
+      else reject(new Error(stderr.trim().slice(-4000) || `yt-dlp exited with code ${code}`));
     });
   });
 }
@@ -78,10 +84,9 @@ function runYtDlp(args) {
 export async function resolveTrack(query) {
   const target = isUrl(query) ? query : `ytsearch1:${query}`;
   const json = await runYtDlp([
-    '--js-runtimes', 'deno',
+    ...YTDLP_BASE_ARGS,
     '--dump-single-json',
     '--flat-playlist',
-    '--no-warnings',
     '--skip-download',
     target,
   ]);
@@ -144,8 +149,7 @@ async function playNext(guildId) {
     connection.subscribe(session.player);
 
     const yt = spawn('yt-dlp', [
-      '--js-runtimes', 'deno',
-      '--no-warnings',
+      ...YTDLP_BASE_ARGS,
       '--no-playlist',
       '-f', 'bestaudio/best',
       '-o', '-',
@@ -187,13 +191,21 @@ async function playNext(guildId) {
 
     yt.once('close', (code) => {
       if (code !== 0 && session.current === item) {
-        logger.error('yt-dlp playback failed', { guildId, code, error: ytError.slice(-2000) });
+        logger.error('yt-dlp playback failed', {
+          guildId,
+          code,
+          error: ytError.trim().slice(-4000) || 'yt-dlp produced no stderr output',
+        });
         session.player.stop(true);
       }
     });
     ffmpeg.once('close', (code) => {
       if (code !== 0 && session.current === item) {
-        logger.error('ffmpeg playback failed', { guildId, code, error: ytError.slice(-2000) });
+        logger.error('ffmpeg playback failed', {
+          guildId,
+          code,
+          error: ytError.trim().slice(-4000) || 'ffmpeg produced no stderr output',
+        });
         session.player.stop(true);
       }
     });

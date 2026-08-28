@@ -170,16 +170,19 @@ async function playNext(guildId) {
     session.ffmpegProcess = ffmpeg;
 
     let ytError = '';
+    let ffmpegError = '';
     yt.stderr.setEncoding('utf8');
     yt.stderr.on('data', (chunk) => { ytError += chunk; });
     ffmpeg.stderr.setEncoding('utf8');
-    ffmpeg.stderr.on('data', (chunk) => { ytError += chunk; });
+    ffmpeg.stderr.on('data', (chunk) => { ffmpegError += chunk; });
 
     yt.on('error', (error) => {
       logger.error('yt-dlp process error', { guildId, error: error?.message, stack: error?.stack });
+      console.error(`[MUSIC][yt-dlp process error][guild:${guildId}]`, error);
     });
     ffmpeg.on('error', (error) => {
       logger.error('ffmpeg process error', { guildId, error: error?.message, stack: error?.stack });
+      console.error(`[MUSIC][ffmpeg process error][guild:${guildId}]`, error);
     });
 
     yt.stdout.pipe(ffmpeg.stdin);
@@ -191,21 +194,25 @@ async function playNext(guildId) {
 
     yt.once('close', (code) => {
       if (code !== 0 && session.current === item) {
-        logger.error('yt-dlp playback failed', {
-          guildId,
-          code,
-          error: ytError.trim().slice(-4000) || 'yt-dlp produced no stderr output',
-        });
+        const detail = ytError.trim().slice(-4000) || 'yt-dlp produced no stderr output';
+        logger.error(`yt-dlp playback failed [code ${code}]\n${detail}`, { guildId });
+        console.error(`\n========== [MUSIC] YT-DLP PLAYBACK FAILED ==========`);
+        console.error(`Guild: ${guildId}`);
+        console.error(`Exit code: ${code}`);
+        console.error(detail);
+        console.error(`====================================================\n`);
         session.player.stop(true);
       }
     });
     ffmpeg.once('close', (code) => {
       if (code !== 0 && session.current === item) {
-        logger.error('ffmpeg playback failed', {
-          guildId,
-          code,
-          error: ytError.trim().slice(-4000) || 'ffmpeg produced no stderr output',
-        });
+        const detail = ffmpegError.trim().slice(-4000) || 'ffmpeg produced no stderr output';
+        logger.error(`ffmpeg playback failed [code ${code}]\n${detail}`, { guildId });
+        console.error(`\n========== [MUSIC] FFMPEG PLAYBACK FAILED ==========`);
+        console.error(`Guild: ${guildId}`);
+        console.error(`Exit code: ${code}`);
+        console.error(detail);
+        console.error(`====================================================\n`);
         session.player.stop(true);
       }
     });

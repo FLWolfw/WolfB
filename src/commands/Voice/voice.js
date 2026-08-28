@@ -6,7 +6,7 @@ import { t, pickLanguage } from '../../services/i18n.js';
 export default {
   data: new SlashCommandBuilder()
     .setName('voice')
-    .setDescription('Trae el bot a un canal de voz y déjalo ahí (sin música).')
+    .setDescription('Trae el bot a un canal de voz y déjalo ahí.')
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.MoveMembers)
     .addSubcommand((s) =>
@@ -36,10 +36,11 @@ export default {
       const me = interaction.guild.members.me;
       if (
         !vc.permissionsFor(me)?.has(PermissionFlagsBits.ViewChannel) ||
-        !vc.permissionsFor(me)?.has(PermissionFlagsBits.Connect)
+        !vc.permissionsFor(me)?.has(PermissionFlagsBits.Connect) ||
+        !vc.permissionsFor(me)?.has(PermissionFlagsBits.Speak)
       ) {
         return interaction.reply({
-          embeds: [{ color: 0xef4444, title: t(lang, 'wolf.cmd.voice.noPermsTitle'), description: t(lang, 'wolf.cmd.voice.noPermsDesc', { channel: `${vc}` }) }],
+          embeds: [{ color: 0xef4444, title: t(lang, 'wolf.cmd.voice.noPermsTitle'), description: `${t(lang, 'wolf.cmd.voice.noPermsDesc', { channel: `${vc}` })}\n\nNecesito también el permiso **Hablar (Speak)** para reproducir audio.` }],
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -50,7 +51,7 @@ export default {
           guildId: interaction.guildId,
           adapterCreator: interaction.guild.voiceAdapterCreator,
           selfDeaf: true,
-          selfMute: true,
+          selfMute: false,
         });
         return interaction.reply({
           embeds: [{ color: 0x22c55e, title: t(lang, 'wolf.cmd.voice.joinedTitle'), description: t(lang, 'wolf.cmd.voice.joinedDesc', { channel: `${vc}` }) }],

@@ -57,12 +57,18 @@ export default {
     .addSubcommand((s) => s.setName('playlist').setDescription('Reproduce una playlist por su ID de Spotify.')
       .addStringOption((o) => o.setName('id').setDescription('ID o URI de la playlist.').setRequired(true))),
 
-  async execute(interaction, client) {
+  // IMPORTANT: the global interaction handler calls every command as
+  // execute(interaction, guildConfig, client). Keep that signature here.
+  async execute(interaction, _guildConfig, client) {
     const sub = interaction.options.getSubcommand();
-    const db = client.db;
+    const db = client?.db;
     const userId = interaction.user.id;
 
     try {
+      if (!db || typeof db.get !== 'function') {
+        throw new Error('Database is not available. Please restart Wolf and try again.');
+      }
+
       if (sub === 'connect') {
         if (!isConfigured()) {
           return interaction.reply({ content: '❌ Spotify no está configurado en Railway. Faltan `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` o `SPOTIFY_REDIRECT_URI`.', flags: MessageFlags.Ephemeral });

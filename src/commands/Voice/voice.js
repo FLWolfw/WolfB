@@ -50,7 +50,9 @@ export default {
           guildId: interaction.guildId,
           adapterCreator: interaction.guild.voiceAdapterCreator,
           selfDeaf: true,
-          selfMute: true,
+          // Keep the bot connected but NOT self-muted. An audio player must be
+          // allowed to speak when a music source is subscribed later.
+          selfMute: false,
         });
         return interaction.reply({
           embeds: [{ color: 0x22c55e, title: t(lang, 'wolf.cmd.voice.joinedTitle'), description: t(lang, 'wolf.cmd.voice.joinedDesc', { channel: `${vc}` }) }],

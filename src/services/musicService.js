@@ -263,6 +263,11 @@ export function resume(guildId) {
 export function skip(guildId) {
   const session = sessions.get(guildId);
   if (!session?.current) return false;
+
+  // Clear the current track BEFORE stopping the player. Otherwise the Idle
+  // event can start the next track and player.stop(true) can immediately
+  // stop that newly-started track as well.
+  session.current = null;
   stopProcesses(session);
   return session.player.stop(true);
 }

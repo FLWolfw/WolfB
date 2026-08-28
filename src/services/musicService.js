@@ -20,6 +20,12 @@ const YTDLP_BASE_ARGS = [
   '--no-warnings',
 ];
 
+// YouTube is increasingly challenging datacenter IPs. Prefer clients that
+// currently do not require account cookies/PO tokens for normal playback.
+const YOUTUBE_PLAYBACK_ARGS = [
+  '--extractor-args', 'youtube:player_client=web_embedded,tv',
+];
+
 function getSession(guildId) {
   let session = sessions.get(guildId);
   if (!session) {
@@ -170,6 +176,7 @@ async function playNext(guildId) {
 
     const yt = spawn('yt-dlp', [
       ...YTDLP_BASE_ARGS,
+      ...YOUTUBE_PLAYBACK_ARGS,
       '--no-playlist',
       '-f', 'bestaudio/best',
       '-o', '-',

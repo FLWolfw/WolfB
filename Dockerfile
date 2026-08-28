@@ -1,18 +1,16 @@
 FROM node:20-alpine
 
-# Create app directory
 WORKDIR /usr/src/app
 
+# Music runtime: yt-dlp resolves/searches media sources and ffmpeg converts
+# the audio stream into a format Discord's voice player can consume.
+RUN apk add --no-cache ffmpeg yt-dlp
 
-# Install app dependencies.
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
-# Bundle app source
 COPY . .
 
-# Expose the health check port from src/app.js
 EXPOSE 3000
 
-# Start the bot
 CMD [ "npm", "start" ]

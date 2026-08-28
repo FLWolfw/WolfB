@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { Readable } from 'node:stream';
 import {
   AudioPlayerStatus,
   NoSubscriberBehavior,
@@ -29,13 +28,13 @@ function getSession(guildId) {
     };
     player.on(AudioPlayerStatus.Idle, () => {
       if (session.current) session.current = null;
-      playNext(guildId).catch((error) => logger.error('music next-track error', { error: error?.message }));
+      playNext(guildId).catch((error) => logger.error('music next-track error', { guildId, error: error?.message }));
     });
     player.on('error', (error) => {
-      logger.error('music player error', { guildId, error: error?.message });
+      logger.error('music player error', { guildId, error: error?.message, stack: error?.stack });
       stopProcesses(session);
       session.current = null;
-      playNext(guildId).catch((err) => logger.error('music recovery error', { error: err?.message }));
+      playNext(guildId).catch((err) => logger.error('music recovery error', { guildId, error: err?.message, stack: err?.stack }));
     });
     sessions.set(guildId, session);
   }
@@ -71,7 +70,7 @@ function runYtDlp(args) {
     child.once('error', reject);
     child.once('close', (code) => {
       if (code === 0) resolve(stdout.trim());
-      else reject(new Error(stderr.trim().slice(-1500) || `yt-dlp exited with code ${code}`));
+      else reject(new Error(stderr.trim().slice(-2000) || `yt-dlp exited with code ${code}`));
     });
   });
 }
@@ -79,6 +78,7 @@ function runYtDlp(args) {
 export async function resolveTrack(query) {
   const target = isUrl(query) ? query : `ytsearch1:${query}`;
   const json = await runYtDlp([
+    '--js-runtimes', 'deno',
     '--dump-single-json',
     '--flat-playlist',
     '--no-warnings',
@@ -111,10 +111,9 @@ async function ensureConnection(guild, channel) {
       selfMute: false,
     });
   } else {
-    // The existing /voice connection may have been created self-muted.
-    // Rejoining with selfMute=false ensures the bot can actually transmit audio.
     const currentChannelId = connection.joinConfig.channelId;
-    if (currentChannelId !== channel.id) {
+    if (currentChannelId !== channel.id || connection.state.status === VoiceConnectionStatus.Destroyed) {
+      connection.destroy();
       connection = joinVoiceChannel({
         channelId: channel.id,
         guildId: guild.id,
@@ -145,6 +144,7 @@ async function playNext(guildId) {
     connection.subscribe(session.player);
 
     const yt = spawn('yt-dlp', [
+      '--js-runtimes', 'deno',
       '--no-warnings',
       '--no-playlist',
       '-f', 'bestaudio/best',
@@ -171,6 +171,13 @@ async function playNext(guildId) {
     ffmpeg.stderr.setEncoding('utf8');
     ffmpeg.stderr.on('data', (chunk) => { ytError += chunk; });
 
+    yt.on('error', (error) => {
+      logger.error('yt-dlp process error', { guildId, error: error?.message, stack: error?.stack });
+    });
+    ffmpeg.on('error', (error) => {
+      logger.error('ffmpeg process error', { guildId, error: error?.message, stack: error?.stack });
+    });
+
     yt.stdout.pipe(ffmpeg.stdin);
     const resource = createAudioResource(ffmpeg.stdout, {
       inputType: StreamType.Raw,
@@ -180,18 +187,23 @@ async function playNext(guildId) {
 
     yt.once('close', (code) => {
       if (code !== 0 && session.current === item) {
-        logger.error('yt-dlp playback failed', { guildId, code, error: ytError.slice(-1500) });
+        logger.error('yt-dlp playback failed', { guildId, code, error: ytError.slice(-2000) });
         session.player.stop(true);
       }
     });
     ffmpeg.once('close', (code) => {
       if (code !== 0 && session.current === item) {
-        logger.error('ffmpeg playback failed', { guildId, code, error: ytError.slice(-1500) });
+        logger.error('ffmpeg playback failed', { guildId, code, error: ytError.slice(-2000) });
         session.player.stop(true);
       }
     });
   } catch (error) {
-    logger.error('music start error', { guildId, error: error?.message });
+    logger.error('music start error', {
+      guildId,
+      error: error?.message || String(error),
+      stack: error?.stack,
+      name: error?.name,
+    });
     stopProcesses(session);
     session.current = null;
     await playNext(guildId);

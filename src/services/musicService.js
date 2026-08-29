@@ -1,8 +1,4 @@
 import { spawn } from 'node:child_process';
-import { writeFile, unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import {
   AudioPlayerStatus,
   NoSubscriberBehavior,
@@ -17,21 +13,6 @@ import {
 import { logger } from '../utils/logger.js';
 
 const sessions = new Map();
-const cookieFiles = new Map();
-
-async function getCookieArgs() {
-  const cookie = process.env.YOUTUBE_COOKIE?.trim();
-  if (!cookie) return [];
-  // Railway env vars contain the Netscape cookie CONTENT, while yt-dlp's
-  // --cookies option expects a FILE PATH. Write it once to /tmp and reuse it.
-  let file = cookieFiles.get(cookie);
-  if (!file) {
-    file = join(tmpdir(), `wolf-youtube-${randomUUID()}.txt`);
-    await writeFile(file, cookie.endsWith('\n') ? cookie : `${cookie}\n`, { encoding: 'utf8', mode: 0o600 });
-    cookieFiles.set(cookie, file);
-  }
-  return ['--cookies', file];
-}
 
 const YTDLP_BASE_ARGS = ['--js-runtimes', 'deno', '--remote-components', 'ejs:npm', '--no-warnings'];
 const YOUTUBE_PLAYBACK_ARGS = ['--extractor-args', 'youtube:player_client=web_embedded,tv'];
@@ -91,8 +72,7 @@ function runYtDlp(args) {
 
 export async function resolveTrack(query) {
   const target = isUrl(query) ? query : `ytsearch1:${query}`;
-  const cookies = await getCookieArgs();
-  const json = await runYtDlp([...YTDLP_BASE_ARGS, ...cookies, '--dump-single-json', '--flat-playlist', '--skip-download', target]);
+  const json = await runYtDlp([...YTDLP_BASE_ARGS, '--dump-single-json', '--flat-playlist', '--skip-download', target]);
   const data = JSON.parse(json); const entry = data.entries?.[0] ?? data;
   if (!entry?.id && !entry?.url) throw new Error('No encontré una canción con esa búsqueda.');
   const id = entry.id;
@@ -117,8 +97,7 @@ async function playNext(guildId) {
     const connection = await ensureConnection(guild, channel);
     if (session.current !== item || session.generation !== generation) return;
     connection.subscribe(session.player);
-    const cookies = await getCookieArgs();
-    const yt = spawn('yt-dlp', [...YTDLP_BASE_ARGS, ...YOUTUBE_PLAYBACK_ARGS, ...cookies, '--no-playlist', '-f', 'bestaudio/best', '-o', '-', item.url], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const yt = spawn('yt-dlp', [...YTDLP_BASE_ARGS, ...YOUTUBE_PLAYBACK_ARGS, '--no-playlist', '-f', 'bestaudio/best', '-o', '-', item.url], { stdio: ['ignore', 'pipe', 'pipe'] });
     const ffmpeg = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['pipe', 'pipe', 'pipe'] });
     session.ytProcess = yt; session.ffmpegProcess = ffmpeg;
     let ytError = '', ffmpegError = '';

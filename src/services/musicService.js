@@ -20,8 +20,6 @@ const YTDLP_BASE_ARGS = [
   '--no-warnings',
 ];
 
-// YouTube is increasingly challenging datacenter IPs. Prefer clients that
-// currently do not require account cookies/PO tokens for normal playback.
 const YOUTUBE_PLAYBACK_ARGS = [
   '--extractor-args', 'youtube:player_client=web_embedded,tv',
 ];
@@ -39,16 +37,13 @@ function getSession(guildId) {
       starting: false,
       generation: 0,
       transitioning: false,
+      transitionTimer: null,
     };
 
     player.on(AudioPlayerStatus.Idle, () => {
-      if (session.transitioning) return;
+      if (session.transitioning || session.starting) return;
       if (session.current) session.current = null;
-      playNext(guildId).catch((error) => logger.error('music next-track error', {
-        guildId,
-        error: error?.message,
-        stack: error?.stack,
-      }));
+      schedulePlayNext(guildId, 0);
     });
 
     player.on('error', (error) => {
@@ -57,11 +52,7 @@ function getSession(guildId) {
       session.current = null;
       session.generation += 1;
       session.transitioning = false;
-      playNext(guildId).catch((err) => logger.error('music recovery error', {
-        guildId,
-        error: err?.message,
-        stack: err?.stack,
-      }));
+      schedulePlayNext(guildId, 0);
     });
 
     sessions.set(guildId, session);
@@ -75,6 +66,27 @@ function stopProcesses(session) {
   }
   session.ytProcess = null;
   session.ffmpegProcess = null;
+}
+
+function schedulePlayNext(guildId, delay = 0) {
+  const session = sessions.get(guildId);
+  if (!session) return;
+
+  if (session.transitionTimer) {
+    clearTimeout(session.transitionTimer);
+    session.transitionTimer = null;
+  }
+
+  session.transitionTimer = setTimeout(() => {
+    session.transitionTimer = null;
+    const latest = sessions.get(guildId);
+    if (!latest || latest.transitioning || latest.starting || latest.current || latest.queue.length === 0) return;
+    playNext(guildId).catch((error) => logger.error('music next-track error', {
+      guildId,
+      error: error?.message,
+      stack: error?.stack,
+    }));
+  }, Math.max(0, delay));
 }
 
 function isUrl(value) {
@@ -156,10 +168,10 @@ async function ensureConnection(guild, channel) {
 
 async function playNext(guildId) {
   const session = sessions.get(guildId);
-  if (!session || session.starting || session.transitioning || session.queue.length === 0) return;
+  if (!session || session.starting || session.transitioning || session.current || session.queue.length === 0) return;
 
   const item = session.queue.shift();
-  const generation = session.generation;
+  const generation = ++session.generation;
   session.starting = true;
   session.current = item;
   stopProcesses(session);
@@ -197,6 +209,12 @@ async function playNext(guildId) {
     yt.stderr.on('data', (chunk) => { ytError += chunk; });
     ffmpeg.stderr.setEncoding('utf8');
     ffmpeg.stderr.on('data', (chunk) => { ffmpegError += chunk; });
+
+    // Stopping a track intentionally can close a pipe while the other process
+    // is still writing. Consume those expected pipe errors instead of allowing
+    // an unhandled EPIPE to terminate the bot.
+    yt.stdout.on('error', () => {});
+    ffmpeg.stdin.on('error', () => {});
 
     yt.on('error', (error) => console.error(`[MUSIC][yt-dlp process error][guild:${guildId}]`, error));
     ffmpeg.on('error', (error) => console.error(`[MUSIC][ffmpeg process error][guild:${guildId}]`, error));
@@ -241,10 +259,17 @@ async function playNext(guildId) {
       });
       stopProcesses(session);
       session.current = null;
-      await playNext(guildId);
     }
   } finally {
     session.starting = false;
+
+    // This is the important queue-transition fix. If skip happened while the
+    // previous track was still connecting/starting, the old implementation
+    // could leave `starting=true` and the scheduled next track would never run.
+    // Once startup finishes, always pump the queue if there is no active track.
+    if (!session.transitioning && !session.current && session.queue.length > 0) {
+      schedulePlayNext(guildId, 0);
+    }
   }
 }
 
@@ -255,9 +280,9 @@ export async function enqueue({ guild, channel, query, requestedBy }) {
   track.requestedBy = requestedBy;
 
   const session = getSession(guild.id);
-  const wasPlaying = Boolean(session.current) || session.starting;
+  const wasPlaying = Boolean(session.current) || session.starting || session.transitioning;
   session.queue.push(track);
-  if (!wasPlaying && !session.starting) await playNext(guild.id);
+  if (!wasPlaying && !session.starting) schedulePlayNext(guild.id, 0);
   return { track, position: session.queue.length + (wasPlaying ? 1 : 0), session };
 }
 
@@ -281,23 +306,27 @@ export function skip(guildId) {
   const session = sessions.get(guildId);
   if (!session?.current && !session?.starting) return false;
 
-  const nextExists = session.queue.length > 0;
+  if (session.transitionTimer) {
+    clearTimeout(session.transitionTimer);
+    session.transitionTimer = null;
+  }
+
   session.transitioning = true;
   session.generation += 1;
   session.current = null;
   stopProcesses(session);
   session.player.stop(true);
 
+  // Give the voice player/process events a tick to settle before starting the
+  // next resource. Do not lose the transition if the old track was still in
+  // its connection/start phase; playNext's finally block will also pump it.
   setTimeout(() => {
     const latest = sessions.get(guildId);
     if (!latest) return;
     latest.transitioning = false;
-    if (!nextExists || latest.queue.length === 0) return;
-    playNext(guildId).catch((error) => logger.error('music skip-next error', {
-      guildId,
-      error: error?.message,
-      stack: error?.stack,
-    }));
+    if (latest.queue.length > 0 && !latest.starting && !latest.current) {
+      schedulePlayNext(guildId, 0);
+    }
   }, 350);
 
   return true;
@@ -306,6 +335,10 @@ export function skip(guildId) {
 export function stop(guildId) {
   const session = sessions.get(guildId);
   if (!session) return false;
+  if (session.transitionTimer) {
+    clearTimeout(session.transitionTimer);
+    session.transitionTimer = null;
+  }
   session.transitioning = true;
   session.generation += 1;
   session.queue = [];

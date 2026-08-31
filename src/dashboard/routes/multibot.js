@@ -1,10 +1,10 @@
 import express from 'express';
-import { listBots, addBot, removeBot, updateBot, ensureMultibotSchema } from '../../services/multibotService.js';
+import { listBots, addBot, removeBot, updateBot, ensureMultibotSchema, getBot } from '../../services/multibotService.js';
 import { ensureCsrfToken } from '../lib/csrf.js';
 import { requireLogin } from '../middleware/auth.js';
 import { renderMultibot } from '../views/multibotPage.js';
 
-export function multibotRoutes(client) {
+export function multibotRoutes(client, manager) {
   const router = express.Router();
   let schemaPromise = null;
 
@@ -57,6 +57,32 @@ export function multibotRoutes(client) {
     }
   });
 
+  router.post('/api/multibot/:id/start', requireLogin, async (req, res) => {
+    try {
+      await ensureSchema();
+      const bot = await getBot(client.db, req.session.user.id, req.params.id);
+      if (!bot) return res.status(404).json({ error: 'not_found' });
+      await manager.start(bot);
+      res.json({ ok: true, status: 'online' });
+    } catch (error) {
+      console.error(`[multibot] start ${req.params.id} failed:`, error?.message || error);
+      res.status(400).json({ error: 'start_failed', message: error?.message || 'No se pudo iniciar el bot.' });
+    }
+  });
+
+  router.post('/api/multibot/:id/stop', requireLogin, async (req, res) => {
+    try {
+      await ensureSchema();
+      const bot = await getBot(client.db, req.session.user.id, req.params.id);
+      if (!bot) return res.status(404).json({ error: 'not_found' });
+      await manager.stop(bot);
+      res.json({ ok: true, status: 'offline' });
+    } catch (error) {
+      console.error(`[multibot] stop ${req.params.id} failed:`, error?.message || error);
+      res.status(500).json({ error: 'stop_failed' });
+    }
+  });
+
   router.patch('/api/multibot/:id', requireLogin, async (req, res) => {
     try {
       await ensureSchema();
@@ -73,6 +99,8 @@ export function multibotRoutes(client) {
   router.delete('/api/multibot/:id', requireLogin, async (req, res) => {
     try {
       await ensureSchema();
+      const bot = await getBot(client.db, req.session.user.id, req.params.id);
+      if (bot) await manager.stop(bot);
       res.json({ removed: await removeBot(client.db, req.session.user.id, req.params.id) });
     } catch (error) {
       console.error('[multibot] DELETE /api/multibot failed:', error?.message || error);

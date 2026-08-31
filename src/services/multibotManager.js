@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, ActivityType, Routes } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { getStoredToken, updateBot } from './multibotService.js';
 
@@ -17,11 +17,22 @@ function cleanName(value, fallback) {
   return name || fallback;
 }
 
+function profileKey(settings, botRecord, instance) {
+  const name = cleanName(settings.name, botRecord.bot_username || instance.user.username);
+  return JSON.stringify({
+    name,
+    avatarUrl: String(settings.avatarUrl || '').trim(),
+    bannerUrl: String(settings.bannerUrl || '').trim(),
+  });
+}
+
 export class MultibotManager {
   constructor(ownerClient) {
     this.ownerClient = ownerClient;
     this.instances = new Map();
     this.starting = new Map();
+    this.applying = new Map();
+    this.appliedProfiles = new Map();
   }
 
   async start(botRecord) {
@@ -49,7 +60,8 @@ export class MultibotManager {
       try {
         await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'online' });
         logger.info(`[multibot] ${instance.user.tag} is online (instance ${id})`);
-        await this.applySettings(botRecord);
+        // Apply the complete Discord profile once after login.
+        await this.applySettings(botRecord, { forceProfile: true });
       } catch (error) {
         logger.error(`[multibot] Failed to initialize instance ${id}: ${error?.message || error}`);
       }
@@ -59,6 +71,7 @@ export class MultibotManager {
       logger.error(`[multibot] Discord client error for ${id}: ${error?.message || error}`);
       if (this.instances.get(id) === instance) {
         this.instances.delete(id);
+        this.appliedProfiles.delete(id);
         try { await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' }); } catch {}
       }
     });
@@ -73,39 +86,58 @@ export class MultibotManager {
     }
   }
 
-  async applySettings(botRecord) {
-    const instance = this.instances.get(Number(botRecord.id));
+  async applySettings(botRecord, { forceProfile = false } = {}) {
+    const id = Number(botRecord.id);
+    const instance = this.instances.get(id);
     if (!instance?.user) return false;
 
+    // Never allow two dashboard saves to update the same Discord profile at once.
+    if (this.applying.has(id)) return this.applying.get(id);
+
+    const run = this.#applySettingsInternal(botRecord, { forceProfile }).finally(() => this.applying.delete(id));
+    this.applying.set(id, run);
+    return run;
+  }
+
+  async #applySettingsInternal(botRecord, { forceProfile }) {
+    const id = Number(botRecord.id);
+    const instance = this.instances.get(id);
     const settings = botRecord.settings || {};
     const name = cleanName(settings.name, botRecord.bot_username || instance.user.username);
     const status = PRESENCE_STATUSES.has(settings.presenceStatus) ? settings.presenceStatus : 'online';
     const activityType = ACTIVITY_TYPES[settings.activityType] ?? ActivityType.Playing;
     const activityText = String(settings.activityText || '').trim().slice(0, 128);
 
-    if (name && instance.user.username !== name) {
-      try { await instance.user.setUsername(name); }
-      catch (error) { logger.error(`[multibot] Failed to set username for ${botRecord.id}: ${error?.message || error}`); }
+    const key = profileKey(settings, botRecord, instance);
+    if (forceProfile || this.appliedProfiles.get(id) !== key) {
+      const body = {};
+      if (name && instance.user.username !== name) body.username = name;
+      const avatarUrl = String(settings.avatarUrl || '').trim();
+      const bannerUrl = String(settings.bannerUrl || '').trim();
+      if (avatarUrl && IMAGE_VALUE.test(avatarUrl)) body.avatar = avatarUrl;
+      if (bannerUrl && IMAGE_VALUE.test(bannerUrl)) body.banner = bannerUrl;
+
+      // Avatar + banner + username are sent in ONE Discord profile request.
+      // This prevents the previous implementation from immediately hitting
+      // Discord's avatar/banner profile rate limits on every dashboard save.
+      if (Object.keys(body).length) {
+        try {
+          await instance.rest.patch(Routes.user(), { body });
+          this.appliedProfiles.set(id, key);
+          logger.info(`[multibot] Discord profile updated for instance ${id}`);
+        } catch (error) {
+          logger.error(`[multibot] Failed to update Discord profile for ${id}: ${error?.message || error}`);
+          // Do not mark the profile as applied after a failed request. It can
+          // be retried by the next intentional settings change/restart.
+        }
+      } else {
+        this.appliedProfiles.set(id, key);
+      }
     }
 
     instance.user.setPresence(activityText
       ? { status, activities: [{ name: activityText, type: activityType }] }
       : { status, activities: [] });
-
-    const avatarUrl = String(settings.avatarUrl || '').trim();
-    if (avatarUrl && IMAGE_VALUE.test(avatarUrl)) {
-      try { await instance.user.setAvatar(avatarUrl); }
-      catch (error) { logger.error(`[multibot] Failed to set avatar for ${botRecord.id}: ${error?.message || error}`); }
-    }
-
-    const bannerUrl = String(settings.bannerUrl || '').trim();
-    if (bannerUrl && IMAGE_VALUE.test(bannerUrl)) {
-      try {
-        await instance.user.setBanner(bannerUrl);
-      } catch (error) {
-        logger.error(`[multibot] Failed to set banner for ${botRecord.id}: ${error?.message || error}`);
-      }
-    }
 
     return true;
   }
@@ -118,6 +150,8 @@ export class MultibotManager {
       return false;
     }
     this.instances.delete(id);
+    this.appliedProfiles.delete(id);
+    this.applying.delete(id);
     try { instance.destroy(); } finally {
       await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' });
     }
@@ -131,6 +165,8 @@ export class MultibotManager {
   async shutdown() {
     const entries = [...this.instances.entries()];
     this.instances.clear();
+    this.appliedProfiles.clear();
+    this.applying.clear();
     await Promise.all(entries.map(async ([id, instance]) => {
       try { instance.destroy(); } catch {}
     }));

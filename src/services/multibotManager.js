@@ -10,6 +10,7 @@ const ACTIVITY_TYPES = {
 };
 
 const PRESENCE_STATUSES = new Set(['online', 'idle', 'dnd', 'invisible']);
+const IMAGE_VALUE = /^(?:https?:\/\/|data:image\/(?:png|jpe?g|webp);base64,)/i;
 
 function cleanName(value, fallback) {
   const name = String(value ?? '').trim().slice(0, 32);
@@ -92,13 +93,13 @@ export class MultibotManager {
       : { status, activities: [] });
 
     const avatarUrl = String(settings.avatarUrl || '').trim();
-    if (avatarUrl && /^https?:\/\//i.test(avatarUrl)) {
+    if (avatarUrl && IMAGE_VALUE.test(avatarUrl)) {
       try { await instance.user.setAvatar(avatarUrl); }
       catch (error) { logger.error(`[multibot] Failed to set avatar for ${botRecord.id}: ${error?.message || error}`); }
     }
 
     const bannerUrl = String(settings.bannerUrl || '').trim();
-    if (bannerUrl && /^https?:\/\//i.test(bannerUrl)) {
+    if (bannerUrl && IMAGE_VALUE.test(bannerUrl)) {
       try {
         await instance.user.setBanner(bannerUrl);
       } catch (error) {

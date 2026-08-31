@@ -52,7 +52,7 @@ export function renderMultibotConfig({ user, bot, csrf }) {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card media-card">
       <div class="row spread" style="margin-bottom:14px">
         <div>
           <h2>🖼️ Imagen de perfil</h2>
@@ -86,7 +86,7 @@ export function renderMultibotConfig({ user, bot, csrf }) {
       <input id="bot-avatar" type="hidden" value="${esc(initialAvatar)}">
     </div>
 
-    <div class="card">
+    <div class="card media-card">
       <div class="row spread" style="margin-bottom:14px">
         <div>
           <h2>🖼️ Banner del bot</h2>
@@ -115,6 +115,7 @@ export function renderMultibotConfig({ user, bot, csrf }) {
             <div><label class="field">Vertical</label><input id="banner-y" class="range" type="range" min="-100" max="100" value="0"></div>
           </div>
           <p class="hint">El resultado se redimensiona y comprime automáticamente para mantener el panel ligero.</p>
+          <p id="banner-error" class="hint media-error" style="display:none">No se pudo cargar este banner. Usa «Subir imagen» para reemplazarlo.</p>
         </div>
       </div>
       <input id="bot-banner" type="hidden" value="${esc(initialBanner)}">
@@ -162,17 +163,21 @@ export function renderMultibotConfig({ user, bot, csrf }) {
   </div>
 
   <style>
-    .media-editor{display:grid;grid-template-columns:minmax(260px,1fr) minmax(260px,1.15fr);gap:20px;align-items:start}
-    .media-stage{position:relative;width:100%;overflow:hidden;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:rgba(255,255,255,.035);touch-action:none;user-select:none}
-    .avatar-stage{max-width:430px;aspect-ratio:1/1;margin:auto}
+    .media-card{min-width:0;overflow:hidden}
+    .media-editor{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+    .media-stage{position:relative;width:100%;max-width:100%;overflow:hidden;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:rgba(255,255,255,.035);touch-action:none;user-select:none}
+    .avatar-stage{aspect-ratio:1/1;margin:auto}
     .banner-stage{aspect-ratio:2.5/1}
     .media-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
     .media-stage.dragging canvas{cursor:grabbing}
     .checker{position:absolute;inset:0;background-image:linear-gradient(45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.035) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.035) 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0}
     .media-empty{position:absolute;inset:0;align-items:center;justify-content:center;color:rgba(255,255,255,.42);font-size:14px;pointer-events:none}
-    .media-controls{min-width:0}
-    .range{width:100%;accent-color:currentColor}
-    @media(max-width:800px){.media-editor{grid-template-columns:1fr}.avatar-stage{max-width:100%}}
+    .media-controls{min-width:0;width:100%;overflow:hidden}
+    .media-controls .row{min-width:0}
+    .media-controls .btn{max-width:100%}
+    .range{width:100%;max-width:100%;accent-color:currentColor}
+    .media-error{margin-top:8px}
+    @media(max-width:800px){.avatar-stage{max-width:100%}}
   </style>
 
   <script>
@@ -180,8 +185,8 @@ export function renderMultibotConfig({ user, bot, csrf }) {
     const BOT_ID = ${JSON.stringify(String(bot.id))};
     const initialImages = { avatar: ${JSON.stringify(initialAvatar)}, banner: ${JSON.stringify(initialBanner)} };
     const editors = {
-      avatar: { width: 512, height: 512, image: null, zoom: 100, x: 0, y: 0, dragX: 0, dragY: 0, source: initialImages.avatar, dirty: false },
-      banner: { width: 1200, height: 480, image: null, zoom: 100, x: 0, y: 0, dragX: 0, dragY: 0, source: initialImages.banner, dirty: false }
+      avatar: { width: 512, height: 512, image: null, zoom: 100, x: 0, y: 0, source: initialImages.avatar, dirty: false },
+      banner: { width: 1200, height: 480, image: null, zoom: 100, x: 0, y: 0, source: initialImages.banner, dirty: false }
     };
 
     async function api(url, method, body) {
@@ -216,10 +221,29 @@ export function renderMultibotConfig({ user, bot, csrf }) {
     }
 
     function loadImage(kind, source) {
-      if (!source) { editors[kind].image = null; drawEditor(kind); return; }
+      const state = editors[kind];
+      const empty = document.getElementById(kind + '-empty');
+      const error = document.getElementById(kind + '-error');
+      if (!source) {
+        state.image = null;
+        empty.style.display = 'flex';
+        if (error) error.style.display = 'none';
+        drawEditor(kind);
+        return;
+      }
       const img = new Image();
-      img.onload = () => { editors[kind].image = img; document.getElementById(kind + '-empty').style.display = 'none'; drawEditor(kind); };
-      img.onerror = () => setMessage('No se pudo cargar la imagen del ' + (kind === 'avatar' ? 'avatar' : 'banner') + '.');
+      if (/^https?:\\/\\//i.test(source)) img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        state.image = img;
+        empty.style.display = 'none';
+        if (error) error.style.display = 'none';
+        drawEditor(kind);
+      };
+      img.onerror = () => {
+        state.image = null;
+        empty.style.display = 'flex';
+        if (error) error.style.display = 'block';
+      };
       img.src = source;
     }
 
@@ -228,6 +252,8 @@ export function renderMultibotConfig({ user, bot, csrf }) {
       state.zoom = 100; state.x = 0; state.y = 0; state.source = initialImages[kind]; state.dirty = false;
       document.getElementById(kind === 'avatar' ? 'bot-avatar' : 'bot-banner').value = state.source;
       document.getElementById(kind + '-empty').style.display = state.source ? 'none' : 'flex';
+      const error = document.getElementById(kind + '-error');
+      if (error) error.style.display = 'none';
       loadImage(kind, state.source);
     }
 
@@ -236,6 +262,8 @@ export function renderMultibotConfig({ user, bot, csrf }) {
       state.image = null; state.source = ''; state.dirty = true; state.zoom = 100; state.x = 0; state.y = 0;
       document.getElementById(kind === 'avatar' ? 'bot-avatar' : 'bot-banner').value = '';
       document.getElementById(kind + '-empty').style.display = 'flex';
+      const error = document.getElementById(kind + '-error');
+      if (error) error.style.display = 'none';
       drawEditor(kind);
     }
 
@@ -260,6 +288,8 @@ export function renderMultibotConfig({ user, bot, csrf }) {
           editors[kind].zoom = 100; editors[kind].x = 0; editors[kind].y = 0; editors[kind].dirty = true;
           document.getElementById(kind === 'avatar' ? 'bot-avatar' : 'bot-banner').value = '';
           document.getElementById(kind + '-empty').style.display = 'none';
+          const error = document.getElementById(kind + '-error');
+          if (error) error.style.display = 'none';
           loadImage(kind, reader.result);
         };
         reader.readAsDataURL(file);

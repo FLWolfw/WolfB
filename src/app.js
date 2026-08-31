@@ -10,6 +10,7 @@ import appConfig from './config/application.js';
 import { checkGiveaways } from './services/giveawayService.js';
 import { checkBirthdays } from './services/birthdayService.js';
 import { setupDashboard } from './dashboard/index.js';
+import { MultibotManager } from './services/multibotManager.js';
 
 export class TitanBot extends Client {
   constructor() {
@@ -40,6 +41,7 @@ export class TitanBot extends Client {
     this.modals = new Collection();
     this.config = appConfig;
     this.db = null;
+    this.multibotManager = null;
     this.startTime = Date.now();
   }
 
@@ -49,6 +51,8 @@ export class TitanBot extends Client {
       const databaseResult = await initializeDatabase();
       this.db = databaseResult.db;
       startupLog(`Database ready — ${this.db.getConnectionType()}`);
+
+      this.multibotManager = new MultibotManager(this);
 
       startupLog('Loading commands...');
       await loadCommands(this);
@@ -140,13 +144,15 @@ export class TitanBot extends Client {
   }
 }
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   shutdownLog('Received SIGTERM — shutting down gracefully');
+  try { await bot?.multibotManager?.shutdown(); } catch (error) { logger.error('Multibot shutdown failed:', error); }
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   shutdownLog('Received SIGINT — shutting down gracefully');
+  try { await bot?.multibotManager?.shutdown(); } catch (error) { logger.error('Multibot shutdown failed:', error); }
   process.exit(0);
 });
 

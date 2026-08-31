@@ -5,21 +5,20 @@ export function renderMultibot({ user, bots, csrf }) {
   const cards = bots.length ? bots.map((bot) => {
     const settings = bot.settings || {};
     const online = bot.status === 'online';
+    const displayName = settings.name || bot.bot_username || 'Bot';
     const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(bot.bot_user_id)}&scope=bot%20applications.commands&permissions=0`;
+    const avatar = settings.avatarUrl ? `<img src="${esc(settings.avatarUrl)}" class="icon" style="object-fit:cover" alt="">` : `<div class="fallback">${esc(displayName.charAt(0).toUpperCase())}</div>`;
     return `<div class="card" style="display:flex;flex-direction:column;gap:14px">
       <div class="row spread">
-        <div><h2>${icon('bot', 18)} ${esc(bot.bot_username || 'Bot')}</h2><p class="hint" style="margin:4px 0 0">ID: ${esc(bot.bot_user_id)}</p></div>
+        <div style="display:flex;align-items:center;gap:12px">${avatar}<div><h2>${icon('bot', 18)} ${esc(displayName)}</h2><p class="hint" style="margin:4px 0 0">ID: ${esc(bot.bot_user_id)}</p></div></div>
         <span id="status-${bot.id}" class="badge ${online ? 'on' : 'off'}">● ${online ? 'online' : 'offline'}</span>
       </div>
-      <div class="grid-2">
-        <div><label class="field">Nombre personalizado</label><input id="name-${bot.id}" type="text" maxlength="80" value="${esc(settings.name || '')}" placeholder="Mi Bot"></div>
-        <div><label class="field">Idioma</label><select id="lang-${bot.id}"><option value="es" ${settings.language !== 'en' ? 'selected' : ''}>Español</option><option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option></select></div>
-      </div>
+      ${settings.description ? `<p class="hint" style="margin:0">${esc(settings.description)}</p>` : ''}
       <div class="row" style="flex-wrap:wrap">
+        <a class="btn" href="/bots/${esc(bot.id)}">${icon('settings', 15)} Configurar</a>
         ${online
           ? `<button class="btn-ghost" onclick="stopBot(${bot.id})">⏹ Apagar</button>`
           : `<button onclick="startBot(${bot.id})">▶ Encender</button>`}
-        <button onclick="saveBot(${bot.id})">${icon('check', 15)} Guardar</button>
         <a class="btn btn-ghost" href="${inviteUrl}" target="_blank" rel="noopener">🔗 Invitar</a>
         <button class="btn-ghost" onclick="removeBot(${bot.id})">Eliminar</button>
       </div>
@@ -67,10 +66,6 @@ export function renderMultibot({ user, bots, csrf }) {
       const msg = document.getElementById('msg-'+id); msg.textContent = 'Desconectando…';
       try { await api('/api/multibot/'+id+'/stop','POST'); location.reload(); }
       catch (e) { msg.textContent = 'No se pudo apagar: ' + e.message; }
-    }
-    async function saveBot(id) {
-      const settings = { name: document.getElementById('name-'+id).value.trim(), language: document.getElementById('lang-'+id).value };
-      try { await api('/api/multibot/'+id,'PATCH',{settings}); location.reload(); } catch (e) { alert('No se pudo guardar: '+e.message); }
     }
     async function removeBot(id) {
       if (!confirm('¿Eliminar esta instancia de tu cuenta?')) return;

@@ -3,6 +3,7 @@ import { listBots, addBot, removeBot, updateBot, ensureMultibotSchema, getBot } 
 import { ensureCsrfToken } from '../lib/csrf.js';
 import { requireLogin } from '../middleware/auth.js';
 import { renderMultibot } from '../views/multibotPage.js';
+import { renderMultibotConfig } from '../views/multibotConfigPage.js';
 
 export function multibotRoutes(client, manager) {
   const router = express.Router();
@@ -26,6 +27,18 @@ export function multibotRoutes(client, manager) {
     } catch (error) {
       console.error('[multibot] GET /bots failed:', error?.message || error);
       res.status(500).send('Error cargando tus bots.');
+    }
+  });
+
+  router.get('/bots/:id', requireLogin, async (req, res) => {
+    try {
+      await ensureSchema();
+      const bot = await getBot(client.db, req.session.user.id, req.params.id);
+      if (!bot) return res.status(404).send('Bot no encontrado.');
+      res.send(renderMultibotConfig({ user: req.session.user, bot, csrf: ensureCsrfToken(req) }));
+    } catch (error) {
+      console.error(`[multibot] GET /bots/${req.params.id} failed:`, error?.message || error);
+      res.status(500).send('Error cargando la configuración del bot.');
     }
   });
 
@@ -89,6 +102,11 @@ export function multibotRoutes(client, manager) {
       const settings = req.body?.settings && typeof req.body.settings === 'object' ? req.body.settings : {};
       const bot = await updateBot(client.db, req.session.user.id, req.params.id, { settings });
       if (!bot) return res.status(404).json({ error: 'not_found' });
+      if (manager) {
+        await manager.applySettings(bot).catch((error) => {
+          console.error(`[multibot] apply settings ${req.params.id} failed:`, error?.message || error);
+        });
+      }
       res.json({ bot });
     } catch (error) {
       console.error('[multibot] PATCH /api/multibot failed:', error?.message || error);

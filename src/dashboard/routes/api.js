@@ -167,12 +167,23 @@ export function apiRoutes(client) {
     }
   });
 
-  router.post('/server/:id/general', async (req, res) => {
-    const language = req.body.language === 'en' ? 'en' : 'es';
-    const prefix = String(req.body.prefix || '!').trim().slice(0, 5) || '!';
-    try { await patchGuildConfig(client.db, req.guild.id, { language, prefix }); flashBack(req, res, 'ok', 'Ajustes generales guardados.'); }
-    catch (e) { logger.error('dash general', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar.'); }
-  });
+  const saveGeneral = async (req, res, source = req.body) => {
+    const language = source.language === 'en' ? 'en' : 'es';
+    const prefix = String(source.prefix || '!').trim().slice(0, 5) || '!';
+    try {
+      await patchGuildConfig(client.db, req.guild.id, { language, prefix });
+      flashBack(req, res, 'ok', 'Ajustes generales guardados.');
+    } catch (e) {
+      logger.error('dash general', { error: e?.message });
+      flashBack(req, res, 'err', 'No se pudo guardar.');
+    }
+  };
+
+  router.post('/server/:id/general', saveGeneral);
+
+  // Compatibility for stale/cached dashboard forms that submit General as GET.
+  // The current dashboard uses POST; this only prevents the old deployed form from 404ing.
+  router.get('/server/:id/general', (req, res) => saveGeneral(req, res, req.query));
 
   router.post('/server/:id/welcome/save', async (req, res) => {
     const ch = resolveChannel(req.guild, req.body.channel);

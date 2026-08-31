@@ -100,11 +100,11 @@ export function apiRoutes(client) {
     catch (e) { logger.error('dash logs category', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo cambiar la categoría.'); }
   });
 
-  router.post('/server/:id/logs/category-channels', async (req, res) => {
+  async function saveCategoryChannels(req, res, source) {
     try {
       let changed = 0;
       for (const cat of KNOWN_CATEGORIES) {
-        const raw = req.body[`ch_${cat}`];
+        const raw = source?.[`ch_${cat}`];
         if (raw === undefined) continue;
         const ch = resolveChannel(req.guild, raw);
         if (!ch.ok) return flashBack(req, res, 'err', `Canal inválido para la categoría "${cat}".`);
@@ -112,7 +112,20 @@ export function apiRoutes(client) {
         changed += 1;
       }
       flashBack(req, res, 'ok', `Enrutamiento guardado (${changed} categorías).`);
-    } catch (e) { logger.error('dash logs category-channels', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar el enrutamiento por categoría.'); }
+    } catch (e) {
+      logger.error('dash logs category-channels', { error: e?.message });
+      flashBack(req, res, 'err', 'No se pudo guardar el enrutamiento por categoría.');
+    }
+  }
+
+  router.post('/server/:id/logs/category-channels', async (req, res) => {
+    await saveCategoryChannels(req, res, req.body);
+  });
+
+  // Compatibility with older/cached dashboard forms that submit this action as GET.
+  // Normal dashboard saves continue to use POST.
+  router.get('/server/:id/logs/category-channels', async (req, res) => {
+    await saveCategoryChannels(req, res, req.query);
   });
 
   router.post('/server/:id/security', async (req, res) => {
@@ -180,9 +193,6 @@ export function apiRoutes(client) {
   };
 
   router.post('/server/:id/general', saveGeneral);
-
-  // Compatibility for stale/cached dashboard forms that submit General as GET.
-  // The current dashboard uses POST; this only prevents the old deployed form from 404ing.
   router.get('/server/:id/general', (req, res) => saveGeneral(req, res, req.query));
 
   router.post('/server/:id/welcome/save', async (req, res) => {

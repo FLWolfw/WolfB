@@ -9,9 +9,10 @@ function key() {
 }
 
 function sqlDb(db) {
-  const raw = db?.db || db;
-  if (!raw || typeof raw.query !== 'function') throw new Error('PostgreSQL query interface is unavailable.');
-  return raw;
+  const pg = db?.db || db;
+  const pool = pg?.pool || pg;
+  if (!pool || typeof pool.query !== 'function') throw new Error('PostgreSQL query interface is unavailable.');
+  return pool;
 }
 
 export function encryptToken(token) {

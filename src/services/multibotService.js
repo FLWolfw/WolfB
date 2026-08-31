@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 const TABLE = 'bot_instances';
+const WARNINGS_TABLE = 'multibot_warnings';
 
 function key() {
   const secret = process.env.SESSION_SECRET || process.env.ENCRYPTION_KEY;
@@ -32,6 +33,8 @@ export function decryptToken(value) {
 export async function ensureMultibotSchema(db) {
   const sql = sqlDb(db);
   await sql.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (id BIGSERIAL PRIMARY KEY, owner_id TEXT NOT NULL, bot_user_id TEXT NOT NULL UNIQUE, bot_username TEXT, encrypted_token TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'offline', settings JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await sql.query(`CREATE TABLE IF NOT EXISTS ${WARNINGS_TABLE} (id BIGSERIAL PRIMARY KEY, bot_instance_id BIGINT NOT NULL REFERENCES ${TABLE}(id) ON DELETE CASCADE, guild_id TEXT NOT NULL, user_id TEXT NOT NULL, moderator_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await sql.query(`CREATE INDEX IF NOT EXISTS multibot_warnings_lookup ON ${WARNINGS_TABLE}(bot_instance_id, guild_id, user_id, created_at DESC)`);
 }
 
 export async function listBots(db, ownerId) {
@@ -61,6 +64,19 @@ export async function updateBot(db, ownerId, id, patch) {
   const status = patch.status || bot.status;
   const { rows } = await sql.query(`UPDATE ${TABLE} SET status=$1, settings=$2, updated_at=NOW() WHERE id=$3 AND owner_id=$4 RETURNING id, bot_user_id, bot_username, status, settings, created_at, updated_at`, [status, JSON.stringify(settings), id, String(ownerId)]);
   return rows[0] || null;
+}
+
+export async function addWarning(db, { botInstanceId, guildId, userId, moderatorId, reason }) {
+  const sql = sqlDb(db);
+  const { rows } = await sql.query(`INSERT INTO ${WARNINGS_TABLE} (bot_instance_id, guild_id, user_id, moderator_id, reason) VALUES ($1,$2,$3,$4,$5) RETURNING id, guild_id, user_id, moderator_id, reason, created_at`, [botInstanceId, String(guildId), String(userId), String(moderatorId), String(reason || 'Sin razón')]);
+  return rows[0];
+}
+
+export async function listWarnings(db, { botInstanceId, guildId, userId, limit = 10 }) {
+  const sql = sqlDb(db);
+  const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 25);
+  const { rows } = await sql.query(`SELECT id, guild_id, user_id, moderator_id, reason, created_at FROM ${WARNINGS_TABLE} WHERE bot_instance_id=$1 AND guild_id=$2 AND user_id=$3 ORDER BY created_at DESC LIMIT $4`, [botInstanceId, String(guildId), String(userId), safeLimit]);
+  return rows;
 }
 
 export async function removeBot(db, ownerId, id) {

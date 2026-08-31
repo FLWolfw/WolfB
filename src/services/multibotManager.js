@@ -2,13 +2,7 @@ import { Client, GatewayIntentBits, Partials, ActivityType, Routes } from 'disco
 import { logger } from '../utils/logger.js';
 import { getStoredToken, updateBot } from './multibotService.js';
 
-const ACTIVITY_TYPES = {
-  Playing: ActivityType.Playing,
-  Listening: ActivityType.Listening,
-  Watching: ActivityType.Watching,
-  Competing: ActivityType.Competing,
-};
-
+const ACTIVITY_TYPES = { Playing: ActivityType.Playing, Listening: ActivityType.Listening, Watching: ActivityType.Watching, Competing: ActivityType.Competing };
 const PRESENCE_STATUSES = new Set(['online', 'idle', 'dnd', 'invisible']);
 const IMAGE_VALUE = /^(?:https?:\/\/|data:image\/(?:png|jpe?g|webp);base64,)/i;
 
@@ -19,11 +13,7 @@ function cleanName(value, fallback) {
 
 function profileKey(settings, botRecord, instance) {
   const name = cleanName(settings.name, botRecord.bot_username || instance.user.username);
-  return JSON.stringify({
-    name,
-    avatarUrl: String(settings.avatarUrl || '').trim(),
-    bannerUrl: String(settings.bannerUrl || '').trim(),
-  });
+  return JSON.stringify({ name, avatarUrl: String(settings.avatarUrl || '').trim(), bannerUrl: String(settings.bannerUrl || '').trim() });
 }
 
 export class MultibotManager {
@@ -33,6 +23,21 @@ export class MultibotManager {
     this.starting = new Map();
     this.applying = new Map();
     this.appliedProfiles = new Map();
+  }
+
+  async restoreOnlineBots() {
+    const pool = this.ownerClient.db?.db?.pool || this.ownerClient.db?.pool || this.ownerClient.db?.db;
+    if (!pool || typeof pool.query !== 'function') throw new Error('PostgreSQL query interface is unavailable.');
+    const { rows } = await pool.query('SELECT * FROM bot_instances WHERE status=$1 ORDER BY id ASC', ['online']);
+    logger.info(`[multibot] Restoring ${rows.length} online bot instance(s) after engine restart`);
+    for (const bot of rows) {
+      try {
+        await this.start(bot);
+      } catch (error) {
+        logger.error(`[multibot] Failed to restore instance ${bot.id}: ${error?.message || error}`);
+        try { await updateBot(this.ownerClient.db, bot.owner_id, bot.id, { status: 'offline' }); } catch {}
+      }
+    }
   }
 
   async start(botRecord) {
@@ -50,23 +55,17 @@ export class MultibotManager {
   async #startInternal(botRecord) {
     const id = Number(botRecord.id);
     const token = getStoredToken(botRecord);
-    const instance = new Client({
-      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
-      partials: [Partials.Channel],
-    });
-
+    const instance = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates], partials: [Partials.Channel] });
     instance.once('ready', async () => {
       this.instances.set(id, instance);
       try {
         await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'online' });
         logger.info(`[multibot] ${instance.user.tag} is online (instance ${id})`);
-        // Apply the complete Discord profile once after login.
         await this.applySettings(botRecord, { forceProfile: true });
       } catch (error) {
         logger.error(`[multibot] Failed to initialize instance ${id}: ${error?.message || error}`);
       }
     });
-
     instance.on('error', async (error) => {
       logger.error(`[multibot] Discord client error for ${id}: ${error?.message || error}`);
       if (this.instances.get(id) === instance) {
@@ -75,7 +74,6 @@ export class MultibotManager {
         try { await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' }); } catch {}
       }
     });
-
     try {
       await instance.login(token);
       return instance;
@@ -90,10 +88,7 @@ export class MultibotManager {
     const id = Number(botRecord.id);
     const instance = this.instances.get(id);
     if (!instance?.user) return false;
-
-    // Never allow two dashboard saves to update the same Discord profile at once.
     if (this.applying.has(id)) return this.applying.get(id);
-
     const run = this.#applySettingsInternal(botRecord, { forceProfile }).finally(() => this.applying.delete(id));
     this.applying.set(id, run);
     return run;
@@ -107,7 +102,6 @@ export class MultibotManager {
     const status = PRESENCE_STATUSES.has(settings.presenceStatus) ? settings.presenceStatus : 'online';
     const activityType = ACTIVITY_TYPES[settings.activityType] ?? ActivityType.Playing;
     const activityText = String(settings.activityText || '').trim().slice(0, 128);
-
     const key = profileKey(settings, botRecord, instance);
     if (forceProfile || this.appliedProfiles.get(id) !== key) {
       const body = {};
@@ -116,10 +110,6 @@ export class MultibotManager {
       const bannerUrl = String(settings.bannerUrl || '').trim();
       if (avatarUrl && IMAGE_VALUE.test(avatarUrl)) body.avatar = avatarUrl;
       if (bannerUrl && IMAGE_VALUE.test(bannerUrl)) body.banner = bannerUrl;
-
-      // Avatar + banner + username are sent in ONE Discord profile request.
-      // This prevents the previous implementation from immediately hitting
-      // Discord's avatar/banner profile rate limits on every dashboard save.
       if (Object.keys(body).length) {
         try {
           await instance.rest.patch(Routes.user(), { body });
@@ -127,18 +117,10 @@ export class MultibotManager {
           logger.info(`[multibot] Discord profile updated for instance ${id}`);
         } catch (error) {
           logger.error(`[multibot] Failed to update Discord profile for ${id}: ${error?.message || error}`);
-          // Do not mark the profile as applied after a failed request. It can
-          // be retried by the next intentional settings change/restart.
         }
-      } else {
-        this.appliedProfiles.set(id, key);
-      }
+      } else this.appliedProfiles.set(id, key);
     }
-
-    instance.user.setPresence(activityText
-      ? { status, activities: [{ name: activityText, type: activityType }] }
-      : { status, activities: [] });
-
+    instance.user.setPresence(activityText ? { status, activities: [{ name: activityText, type: activityType }] } : { status, activities: [] });
     return true;
   }
 
@@ -152,23 +134,17 @@ export class MultibotManager {
     this.instances.delete(id);
     this.appliedProfiles.delete(id);
     this.applying.delete(id);
-    try { instance.destroy(); } finally {
-      await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' });
-    }
+    try { instance.destroy(); } finally { await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' }); }
     return true;
   }
 
-  get(id) {
-    return this.instances.get(Number(id)) || null;
-  }
+  get(id) { return this.instances.get(Number(id)) || null; }
 
   async shutdown() {
     const entries = [...this.instances.entries()];
     this.instances.clear();
     this.appliedProfiles.clear();
     this.applying.clear();
-    await Promise.all(entries.map(async ([id, instance]) => {
-      try { instance.destroy(); } catch {}
-    }));
+    await Promise.all(entries.map(async ([id, instance]) => { try { instance.destroy(); } catch {} }));
   }
 }

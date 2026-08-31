@@ -82,7 +82,10 @@ export class TitanBot extends Client {
   startWebServer() {
     const app = express();
     app.set('trust proxy', 1);
-    app.use(express.json());
+
+    // Multibot avatar/banner editors send base64 image data in JSON.
+    // The default Express JSON limit (~100kb) is too small for these payloads.
+    app.use(express.json({ limit: '10mb' }));
 
     app.get('/health', (req, res) => res.json({
       ok: true,

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 
 import { logger } from '../utils/logger.js';
 import { createSessionMiddleware, securityHeaders } from './lib/security.js';
+import { csrfProtection } from './lib/csrf.js';
 import { authRoutes } from './routes/auth.js';
 import { pageRoutes } from './routes/pages.js';
 import { apiRoutes } from './routes/api.js';

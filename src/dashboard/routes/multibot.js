@@ -1,23 +1,34 @@
 import express from 'express';
-import { makeRequireOwner } from '../../middleware/auth.js';
 import { listBots, addBot, removeBot, updateBot } from '../../services/multibotService.js';
+import { ensureCsrfToken } from '../lib/csrf.js';
+import { requireLogin } from '../middleware/auth.js';
+import { renderMultibot } from '../views/multibotPage.js';
 
 export function multibotRoutes(client) {
   const router = express.Router();
-  router.get('/api/multibot', async (req, res) => {
-    if (!req.session?.user) return res.status(401).json({ error: 'login_required' });
-    try { res.json({ bots: await listBots(client.db, req.session.user.id) }); }
-    catch (error) { res.status(500).json({ error: 'database_error' }); }
+
+  router.get('/bots', requireLogin, async (req, res) => {
+    try {
+      const bots = await listBots(client.db, req.session.user.id);
+      res.send(renderMultibot({ user: req.session.user, bots, csrf: ensureCsrfToken(req) }));
+    } catch (error) {
+      res.status(500).send('Error cargando tus bots.');
+    }
   });
 
-  router.post('/api/multibot', async (req, res) => {
-    if (!req.session?.user) return res.status(401).json({ error: 'login_required' });
+  router.get('/api/multibot', requireLogin, async (req, res) => {
+    try { res.json({ bots: await listBots(client.db, req.session.user.id) }); }
+    catch { res.status(500).json({ error: 'database_error' }); }
+  });
+
+  router.post('/api/multibot', requireLogin, async (req, res) => {
     const token = String(req.body?.token || '').trim();
     if (!token) return res.status(400).json({ error: 'token_required' });
     try {
       const response = await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bot ${token}` } });
       if (!response.ok) return res.status(400).json({ error: 'invalid_bot_token' });
       const user = await response.json();
+      if (!user.bot) return res.status(400).json({ error: 'not_a_bot_user' });
       const bot = await addBot(client.db, { ownerId: req.session.user.id, botUserId: user.id, botUsername: user.username, token });
       res.status(201).json({ bot });
     } catch (error) {
@@ -26,8 +37,7 @@ export function multibotRoutes(client) {
     }
   });
 
-  router.patch('/api/multibot/:id', async (req, res) => {
-    if (!req.session?.user) return res.status(401).json({ error: 'login_required' });
+  router.patch('/api/multibot/:id', requireLogin, async (req, res) => {
     try {
       const settings = req.body?.settings && typeof req.body.settings === 'object' ? req.body.settings : {};
       const bot = await updateBot(client.db, req.session.user.id, req.params.id, { settings });
@@ -36,8 +46,7 @@ export function multibotRoutes(client) {
     } catch { res.status(500).json({ error: 'database_error' }); }
   });
 
-  router.delete('/api/multibot/:id', async (req, res) => {
-    if (!req.session?.user) return res.status(401).json({ error: 'login_required' });
+  router.delete('/api/multibot/:id', requireLogin, async (req, res) => {
     try { res.json({ removed: await removeBot(client.db, req.session.user.id, req.params.id) }); }
     catch { res.status(500).json({ error: 'database_error' }); }
   });

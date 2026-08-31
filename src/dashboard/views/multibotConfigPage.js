@@ -9,6 +9,7 @@ export function renderMultibotConfig({ user, bot, csrf }) {
   const activityType = ['Playing', 'Listening', 'Watching', 'Competing'].includes(settings.activityType) ? settings.activityType : 'Playing';
   const online = bot.status === 'online';
   const avatarUrl = String(settings.avatarUrl || '').trim();
+  const bannerUrl = String(settings.bannerUrl || '').trim();
 
   const body = `<div class="page-head">
     <div class="eyebrow">Multibot B1 · Configuración</div>
@@ -50,7 +51,16 @@ export function renderMultibotConfig({ user, bot, csrf }) {
       <div style="margin-top:16px">
         <label class="field">Avatar del bot</label>
         <input id="bot-avatar" type="url" maxlength="1000" value="${esc(avatarUrl)}" placeholder="https://ejemplo.com/avatar.png">
-        <p class="hint">Pega una URL pública de una imagen. Se actualizará en Discord al guardar mientras el bot esté online.</p>
+        <p class="hint">Pega una URL pública de una imagen.</p>
+      </div>
+
+      <div style="margin-top:16px">
+        <label class="field">Banner del bot</label>
+        <input id="bot-banner" type="url" maxlength="1000" value="${esc(bannerUrl)}" placeholder="https://ejemplo.com/banner.png">
+        <p class="hint">Pega una URL pública de la imagen que quieras usar como banner del perfil del bot.</p>
+        <div id="banner-preview" style="margin-top:12px;border-radius:12px;overflow:hidden;min-height:90px;background:rgba(255,255,255,.04);display:${bannerUrl ? 'block' : 'none'}">
+          ${bannerUrl ? `<img src="${esc(bannerUrl)}" alt="Vista previa del banner" style="display:block;width:100%;height:150px;object-fit:cover">` : ''}
+        </div>
       </div>
     </div>
 
@@ -110,11 +120,17 @@ export function renderMultibotConfig({ user, bot, csrf }) {
         language: document.getElementById('bot-language').value,
         description: document.getElementById('bot-description').value.trim(),
         avatarUrl: document.getElementById('bot-avatar').value.trim(),
+        bannerUrl: document.getElementById('bot-banner').value.trim(),
         presenceStatus: document.getElementById('presence-status').value,
         activityType: document.getElementById('activity-type').value,
         activityText: document.getElementById('activity-text').value.trim()
       };
     }
+    document.getElementById('bot-banner').addEventListener('input', (e) => {
+      const url = e.target.value.trim(); const box = document.getElementById('banner-preview');
+      box.innerHTML = url ? '<img src="'+url.replace(/"/g,'&quot;')+'" alt="Vista previa del banner" style="display:block;width:100%;height:150px;object-fit:cover">' : '';
+      box.style.display = url ? 'block' : 'none';
+    });
     async function saveBot() {
       const msg = document.getElementById('msg');
       msg.textContent = 'Guardando y aplicando cambios…';

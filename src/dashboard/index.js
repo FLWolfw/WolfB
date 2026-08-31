@@ -17,7 +17,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function setupDashboard(app, client) {
   app.set('trust proxy', 1);
   app.use(express.urlencoded({ extended: true, limit: '32kb' }));
-  app.use(express.json({ limit: '32kb' }));
+  // Multibot image editors send compressed base64 previews in JSON.
+  app.use(express.json({ limit: '1mb' }));
   app.use('/assets', express.static(path.join(__dirname, 'public'), { maxAge: '7d', etag: true }));
   app.use(createSessionMiddleware());
   app.use(securityHeaders);

@@ -1,6 +1,20 @@
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, ActivityType } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import { getStoredToken, updateBot } from './multibotService.js';
+
+const ACTIVITY_TYPES = {
+  Playing: ActivityType.Playing,
+  Listening: ActivityType.Listening,
+  Watching: ActivityType.Watching,
+  Competing: ActivityType.Competing,
+};
+
+const PRESENCE_STATUSES = new Set(['online', 'idle', 'dnd', 'invisible']);
+
+function cleanName(value, fallback) {
+  const name = String(value ?? '').trim().slice(0, 32);
+  return name || fallback;
+}
 
 export class MultibotManager {
   constructor(ownerClient) {
@@ -11,7 +25,10 @@ export class MultibotManager {
 
   async start(botRecord) {
     const id = Number(botRecord.id);
-    if (this.instances.has(id)) return this.instances.get(id);
+    if (this.instances.has(id)) {
+      await this.applySettings(botRecord);
+      return this.instances.get(id);
+    }
     if (this.starting.has(id)) return this.starting.get(id);
 
     const promise = this.#startInternal(botRecord).finally(() => this.starting.delete(id));
@@ -32,8 +49,9 @@ export class MultibotManager {
       try {
         await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'online' });
         logger.info(`[multibot] ${instance.user.tag} is online (instance ${id})`);
+        await this.applySettings(botRecord);
       } catch (error) {
-        logger.error(`[multibot] Failed to persist online state for ${id}: ${error?.message || error}`);
+        logger.error(`[multibot] Failed to initialize instance ${id}: ${error?.message || error}`);
       }
     });
 
@@ -53,6 +71,36 @@ export class MultibotManager {
       try { await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' }); } catch {}
       throw error;
     }
+  }
+
+  async applySettings(botRecord) {
+    const instance = this.instances.get(Number(botRecord.id));
+    if (!instance?.user) return false;
+
+    const settings = botRecord.settings || {};
+    const name = cleanName(settings.name, botRecord.bot_username || instance.user.username);
+    const status = PRESENCE_STATUSES.has(settings.presenceStatus) ? settings.presenceStatus : 'online';
+    const activityType = ACTIVITY_TYPES[settings.activityType] ?? ActivityType.Playing;
+    const activityText = String(settings.activityText || '').trim().slice(0, 128);
+
+    if (name && instance.user.username !== name) {
+      try { await instance.user.setUsername(name); }
+      catch (error) { logger.error(`[multibot] Failed to set username for ${botRecord.id}: ${error?.message || error}`); }
+    }
+
+    if (activityText) {
+      instance.user.setPresence({ status, activities: [{ name: activityText, type: activityType }] });
+    } else {
+      instance.user.setPresence({ status, activities: [] });
+    }
+
+    const avatarUrl = String(settings.avatarUrl || '').trim();
+    if (avatarUrl && /^https?:\/\//i.test(avatarUrl)) {
+      try { await instance.user.setAvatar(avatarUrl); }
+      catch (error) { logger.error(`[multibot] Failed to set avatar for ${botRecord.id}: ${error?.message || error}`); }
+    }
+
+    return true;
   }
 
   async stop(botRecord) {

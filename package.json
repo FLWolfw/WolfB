@@ -11,24 +11,25 @@
     "migrate:check": "node scripts/migrate.js check",
     "migrate:status": "node scripts/migrate.js status",
     "backup:db": "node scripts/backup.js",
-    "restore:db": "node scripts/restore.js",
-    "backup:drill": "node scripts/restore-drill.js"
+    "restore:drill": "node scripts/restore-drill.js",
+    "restore": "node scripts/restore.js"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.1",
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.2",
     "axios": "^1.16.0",
     "discord.js": "^14.15.3",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-session": "^1.19.0",
     "node-cron": "^4.2.1",
+    "opusscript": "^0.1.1",
     "pg": "^8.11.3",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
     "zod": "^3.25.76"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   }
 }

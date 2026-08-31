@@ -10,6 +10,7 @@ import appConfig from './config/application.js';
 import { checkGiveaways } from './services/giveawayService.js';
 import { checkBirthdays } from './services/birthdayService.js';
 import { setupDashboard } from './dashboard/index.js';
+import { handleOAuthCallback } from './services/spotifyService.js';
 
 export class TitanBot extends Client {
   constructor() {
@@ -86,6 +87,19 @@ export class TitanBot extends Client {
       guilds: this.guilds.cache.size,
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
     }));
+
+    app.get('/spotify/callback', async (req, res) => {
+      try {
+        if (req.query.error) {
+          return res.status(400).send(`<h2>Spotify authorization cancelled</h2><p>${String(req.query.error)}</p><p>You can close this page and return to Discord.</p>`);
+        }
+        const result = await handleOAuthCallback({ code: req.query.code, state: req.query.state });
+        res.status(200).send(`<!doctype html><html><head><meta charset="utf-8"><title>Wolf × Spotify</title></head><body style="font-family:Arial,sans-serif;text-align:center;padding:60px"><h1>🎵 Spotify conectado</h1><p>Cuenta: <strong>${String(result.profile?.display_name || result.profile?.id || 'Spotify')}</strong></p><p>Ya puedes volver a Discord y usar <strong>/spotify status</strong>.</p></body></html>`);
+      } catch (error) {
+        logger.error('Spotify OAuth callback failed', error);
+        res.status(400).send(`<h2>No se pudo conectar Spotify</h2><p>${String(error?.message || error).replace(/[<>]/g, '')}</p><p>Vuelve a Discord y usa /spotify connect para intentarlo otra vez.</p>`);
+      }
+    });
 
     setupDashboard(app, this);
 

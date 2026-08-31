@@ -100,11 +100,11 @@ export function apiRoutes(client) {
     catch (e) { logger.error('dash logs category', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo cambiar la categoría.'); }
   });
 
-  async function saveCategoryChannels(req, res, source) {
+  router.post('/server/:id/logs/category-channels', async (req, res) => {
     try {
       let changed = 0;
       for (const cat of KNOWN_CATEGORIES) {
-        const raw = source?.[`ch_${cat}`];
+        const raw = req.body[`ch_${cat}`];
         if (raw === undefined) continue;
         const ch = resolveChannel(req.guild, raw);
         if (!ch.ok) return flashBack(req, res, 'err', `Canal inválido para la categoría "${cat}".`);
@@ -112,50 +112,67 @@ export function apiRoutes(client) {
         changed += 1;
       }
       flashBack(req, res, 'ok', `Enrutamiento guardado (${changed} categorías).`);
-    } catch (e) {
-      logger.error('dash logs category-channels', { error: e?.message });
-      flashBack(req, res, 'err', 'No se pudo guardar el enrutamiento por categoría.');
-    }
-  }
-
-  router.post('/server/:id/logs/category-channels', async (req, res) => {
-    await saveCategoryChannels(req, res, req.body);
-  });
-
-  router.get('/server/:id/logs/category-channels', async (req, res) => {
-    await saveCategoryChannels(req, res, req.query);
+    } catch (e) { logger.error('dash logs category-channels', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar el enrutamiento por categoría.'); }
   });
 
   router.post('/server/:id/security', async (req, res) => {
     try {
       const current = await getGuildConfig(client.db, req.guild.id);
       const thresholds = {
-        channelDelete: clampInt(req.body.channelDelete, 1, 50, 3), channelCreate: clampInt(req.body.channelCreate, 1, 50, 5), channelUpdate: clampInt(req.body.channelUpdate, 1, 50, 5),
-        roleCreate: clampInt(req.body.roleCreate, 1, 50, 3), roleDelete: clampInt(req.body.roleDelete, 1, 50, 3), roleUpdate: clampInt(req.body.roleUpdate, 1, 50, 3),
-        ban: clampInt(req.body.ban, 1, 50, 3), kick: clampInt(req.body.kick, 1, 50, 3), webhook: clampInt(req.body.webhook, 1, 50, 2), dangerousPermission: clampInt(req.body.dangerousPermission, 1, 50, 1),
+        channelDelete: clampInt(req.body.channelDelete, 1, 50, 3),
+        channelCreate: clampInt(req.body.channelCreate, 1, 50, 5),
+        channelUpdate: clampInt(req.body.channelUpdate, 1, 50, 5),
+        roleCreate: clampInt(req.body.roleCreate, 1, 50, 3),
+        roleDelete: clampInt(req.body.roleDelete, 1, 50, 3),
+        roleUpdate: clampInt(req.body.roleUpdate, 1, 50, 3),
+        ban: clampInt(req.body.ban, 1, 50, 3),
+        kick: clampInt(req.body.kick, 1, 50, 3),
+        webhook: clampInt(req.body.webhook, 1, 50, 2),
+        dangerousPermission: clampInt(req.body.dangerousPermission, 1, 50, 1),
       };
       const protections = {
-        channelDelete: req.body.protectChannelDelete === '1', channelCreate: req.body.protectChannelCreate === '1', channelUpdate: req.body.protectChannelUpdate === '1',
-        roleCreate: req.body.protectRoleCreate === '1', roleDelete: req.body.protectRoleDelete === '1', roleUpdate: req.body.protectRoleUpdate === '1',
-        ban: req.body.protectBan === '1', kick: req.body.protectKick === '1', webhook: req.body.protectWebhook === '1', dangerousPermissions: req.body.protectDangerous === '1',
+        channelDelete: req.body.protectChannelDelete === '1',
+        channelCreate: req.body.protectChannelCreate === '1',
+        channelUpdate: req.body.protectChannelUpdate === '1',
+        roleCreate: req.body.protectRoleCreate === '1',
+        roleDelete: req.body.protectRoleDelete === '1',
+        roleUpdate: req.body.protectRoleUpdate === '1',
+        ban: req.body.protectBan === '1',
+        kick: req.body.protectKick === '1',
+        webhook: req.body.protectWebhook === '1',
+        dangerousPermissions: req.body.protectDangerous === '1',
       };
       const safeRoleIds = roleIdList(req.guild, req.body.safeRoleIds);
       const protectedRoleIds = roleIdList(req.guild, req.body.protectedRoleIds);
       const action = ['alert', 'quarantine', 'ban'].includes(req.body.action) ? req.body.action : 'quarantine';
-      const emergencyMode = req.body.emergencyMode === undefined ? Boolean(current.antiNuke?.emergencyMode) : req.body.emergencyMode === '1';
-      await updateAntiNukeConfig(client.db, req.guild.id, { enabled: req.body.enabled === '1', emergencyMode, windowMs: clampInt(req.body.windowMs, 1000, 60000, 10000), incidentWindowMs: clampInt(req.body.incidentWindowMs, 5000, 120000, 30000), action, thresholds, protections, safeRoleIds, protectedRoleIds });
+      const emergencyMode = req.body.emergencyMode === undefined
+        ? Boolean(current.antiNuke?.emergencyMode)
+        : req.body.emergencyMode === '1';
+
+      await updateAntiNukeConfig(client.db, req.guild.id, {
+        enabled: req.body.enabled === '1',
+        emergencyMode,
+        windowMs: clampInt(req.body.windowMs, 1000, 60000, 10000),
+        incidentWindowMs: clampInt(req.body.incidentWindowMs, 5000, 120000, 30000),
+        action,
+        thresholds,
+        protections,
+        safeRoleIds,
+        protectedRoleIds,
+      });
       flashBack(req, res, 'ok', 'Configuración de Anti-Nuke guardada para este servidor.');
-    } catch (e) { logger.error('dash security', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar Anti-Nuke.'); }
+    } catch (e) {
+      logger.error('dash security', { error: e?.message });
+      flashBack(req, res, 'err', 'No se pudo guardar Anti-Nuke.');
+    }
   });
 
-  const saveGeneral = async (req, res, source = req.body) => {
-    const language = source.language === 'en' ? 'en' : 'es';
-    const prefix = String(source.prefix || '!').trim().slice(0, 5) || '!';
+  router.post('/server/:id/general', async (req, res) => {
+    const language = req.body.language === 'en' ? 'en' : 'es';
+    const prefix = String(req.body.prefix || '!').trim().slice(0, 5) || '!';
     try { await patchGuildConfig(client.db, req.guild.id, { language, prefix }); flashBack(req, res, 'ok', 'Ajustes generales guardados.'); }
     catch (e) { logger.error('dash general', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar.'); }
-  };
-  router.post('/server/:id/general', saveGeneral);
-  router.get('/server/:id/general', (req, res) => saveGeneral(req, res, req.query));
+  });
 
   router.post('/server/:id/welcome/save', async (req, res) => {
     const ch = resolveChannel(req.guild, req.body.channel);
@@ -168,39 +185,55 @@ export function apiRoutes(client) {
   router.post('/server/:id/leveling', async (req, res) => {
     const ch = resolveChannel(req.guild, req.body.channel);
     if (!ch.ok) return flashBack(req, res, 'err', 'Canal de niveles inválido.');
-    const xpmin = clampInt(req.body.xpmin, 1, 500, 15); const xpmax = Math.max(xpmin, clampInt(req.body.xpmax, 1, 500, 25));
+    const xpmin = clampInt(req.body.xpmin, 1, 500, 15);
+    const xpmax = Math.max(xpmin, clampInt(req.body.xpmax, 1, 500, 25));
     try { await patchGuildConfig(client.db, req.guild.id, { leveling: { enabled: String(req.body.enabled) === '1', announceLevelUp: String(req.body.announce) === '1', levelUpChannel: ch.id, xpPerMessage: { min: xpmin, max: xpmax }, xpCooldown: clampInt(req.body.cooldown, 0, 3600, 20), xpMultiplier: clampInt(req.body.multiplier, 1, 10, 1) } }); flashBack(req, res, 'ok', 'Niveles guardado.'); }
     catch (e) { logger.error('dash leveling', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar niveles.'); }
   });
 
   router.post('/server/:id/birthday', async (req, res) => {
-    const ch = resolveChannel(req.guild, req.body.channel); const role = resolveRole(req.guild, req.body.role);
-    if (!ch.ok) return flashBack(req, res, 'err', 'Canal de cumpleaños inválido.'); if (!role.ok) return flashBack(req, res, 'err', 'Rol de cumpleaños inválido.');
+    const ch = resolveChannel(req.guild, req.body.channel);
+    const role = resolveRole(req.guild, req.body.role);
+    if (!ch.ok) return flashBack(req, res, 'err', 'Canal de cumpleaños inválido.');
+    if (!role.ok) return flashBack(req, res, 'err', 'Rol de cumpleaños inválido.');
     try { await patchGuildConfig(client.db, req.guild.id, { birthdayChannelId: ch.id, birthdayRoleId: role.id }); flashBack(req, res, 'ok', 'Cumpleaños guardado.'); }
     catch (e) { logger.error('dash birthday', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar cumpleaños.'); }
   });
 
   router.post('/server/:id/moderation', async (req, res) => {
-    const mod = resolveRole(req.guild, req.body.modRole); const admin = resolveRole(req.guild, req.body.adminRole);
+    const mod = resolveRole(req.guild, req.body.modRole);
+    const admin = resolveRole(req.guild, req.body.adminRole);
     if (!mod.ok || !admin.ok) return flashBack(req, res, 'err', 'Rol inválido.');
     try { await patchGuildConfig(client.db, req.guild.id, { modRole: mod.id, adminRole: admin.id }); flashBack(req, res, 'ok', 'Moderación guardada.'); }
     catch (e) { logger.error('dash moderation', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar moderación.'); }
   });
 
   router.post('/server/:id/autorole', async (req, res) => {
-    const role = resolveRole(req.guild, req.body.autoRole); if (!role.ok) return flashBack(req, res, 'err', 'Rol inválido.');
+    const role = resolveRole(req.guild, req.body.autoRole);
+    if (!role.ok) return flashBack(req, res, 'err', 'Rol inválido.');
     try { await patchGuildConfig(client.db, req.guild.id, { autoRole: role.id }); flashBack(req, res, 'ok', 'Auto-rol guardado.'); }
     catch (e) { logger.error('dash autorole', { error: e?.message }); flashBack(req, res, 'err', 'No se pudo guardar auto-rol.'); }
   });
 
   router.post('/admin/access', requireOwner, async (req, res) => {
-    const guildId = String(req.body.guild_id || '').trim(); const action = String(req.body.action || '');
-    if (!/^\d{15,25}$/.test(guildId) || !['grant', 'revoke'].includes(action)) { req.session.flash = { type: 'err', msg: 'Datos inválidos.' }; return res.redirect('/admin'); }
+    const guildId = String(req.body.guild_id || '').trim();
+    const action = String(req.body.action || '');
+    if (!/^\d{15,25}$/.test(guildId) || !['grant', 'revoke'].includes(action)) {
+      req.session.flash = { type: 'err', msg: 'Datos inválidos.' };
+      return res.redirect('/admin');
+    }
     try {
-      if (action === 'grant') { await grantAccess(client.db, guildId, req.session.user.id); postApprovalSetup(client, guildId).catch(() => {}); req.session.flash = { type: 'ok', msg: `Servidor ${guildId} aprobado.` }; }
-      else { await revokeAccess(client.db, guildId); req.session.flash = { type: 'ok', msg: `Acceso del servidor ${guildId} revocado.` }; }
+      if (action === 'grant') {
+        await grantAccess(client.db, guildId, req.session.user.id);
+        postApprovalSetup(client, guildId).catch(() => {});
+        req.session.flash = { type: 'ok', msg: `Servidor ${guildId} aprobado.` };
+      } else {
+        await revokeAccess(client.db, guildId);
+        req.session.flash = { type: 'ok', msg: `Acceso del servidor ${guildId} revocado.` };
+      }
     } catch (e) { logger.error('dash admin access', { error: e?.message }); req.session.flash = { type: 'err', msg: 'No se pudo actualizar el acceso.' }; }
     return res.redirect('/admin');
   });
+
   return router;
 }

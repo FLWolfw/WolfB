@@ -9,46 +9,24 @@ import { authRoutes } from './routes/auth.js';
 import { pageRoutes } from './routes/pages.js';
 import { apiRoutes } from './routes/api.js';
 import { antiSpamRoutes } from './routes/antiSpam.js';
+import { multibotRoutes } from './routes/multibot.js';
+import { ensureMultibotSchema } from '../services/multibotService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * Wolf web dashboard.
- *
- * Security model:
- *  - hardened session (no shared default secret, httpOnly/sameSite)
- *  - CSRF token required on every state-changing POST
- *  - every /server/:id route (page + api) re-checks that the logged-in
- *    user actually has admin on THAT guild (closes the prior IDOR)
- *  - all dynamic text is HTML-escaped in the views
- */
 export function setupDashboard(app, client) {
-  // Behind Railway/Heroku/etc. TLS is terminated at the proxy and the
-  // app is reached over HTTP. Without trusting the proxy, Express sees
-  // req.secure=false and express-session refuses to set the `secure`
-  // session cookie, so the OAuth state never persists between /login
-  // and /callback ("login inválido o expirado"). Trust the first proxy
-  // so X-Forwarded-Proto is honoured.
   app.set('trust proxy', 1);
-
   app.use(express.urlencoded({ extended: true, limit: '32kb' }));
-
-  app.use(
-    '/assets',
-    express.static(path.join(__dirname, 'public'), {
-      maxAge: '7d',
-      etag: true,
-    }),
-  );
-
+  app.use(express.json({ limit: '32kb' }));
+  app.use('/assets', express.static(path.join(__dirname, 'public'), { maxAge: '7d', etag: true }));
   app.use(createSessionMiddleware());
   app.use(securityHeaders);
   app.use(csrfProtection);
-
   app.use('/', authRoutes());
   app.use('/', antiSpamRoutes(client));
   app.use('/', pageRoutes(client));
-  app.use('/api', apiRoutes(client));
-
-  logger.info('Wolf dashboard mounted (/, /dashboard, /server/:id, /server/:id/antispam, /api)');
+  app.use('/', apiRoutes(client));
+  app.use('/', multibotRoutes(client));
+  ensureMultibotSchema(client.db).catch((error) => logger.error('Multibot schema initialization failed', { error: error?.message }));
+  logger.info('Wolf dashboard mounted with multibot support');
 }

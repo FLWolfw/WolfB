@@ -227,6 +227,10 @@ export async function enforceQuarantine(member, state, client, reason = 'Wolf An
 
 export async function handleQuarantineBypass(member, executor, client, metadata = {}) {
   if (!member?.guild || !client?.db) return null;
+
+  // The server owner is always trusted and can freely manage quarantined members.
+  if (executor?.id === member.guild.ownerId) return null;
+
   const state = await getQuarantine(client.db, member.guild.id, member.id);
   if (!state?.active) return null;
 

@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { getStoredToken, listBots, getBot, updateBot, removeBot } from './multibotService.js';
+import { getStoredToken, updateBot } from './multibotService.js';
 
 export class MultibotManager {
   constructor(ownerClient) {
@@ -28,18 +28,18 @@ export class MultibotManager {
     });
 
     instance.once('ready', async () => {
+      this.instances.set(id, instance);
       try {
-        this.instances.set(id, instance);
         await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'online' });
-        logger.info(`[multibot] ${instance.user.tag} is online`, { botId: id });
+        logger.info(`[multibot] ${instance.user.tag} is online (instance ${id})`);
       } catch (error) {
-        logger.error(`[multibot] Failed to persist online state for ${id}:`, error);
+        logger.error(`[multibot] Failed to persist online state for ${id}: ${error?.message || error}`);
       }
     });
 
     instance.on('error', async (error) => {
-      logger.error(`[multibot] Discord client error for ${id}:`, error);
-      if (this.instances.has(id)) {
+      logger.error(`[multibot] Discord client error for ${id}: ${error?.message || error}`);
+      if (this.instances.get(id) === instance) {
         this.instances.delete(id);
         try { await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' }); } catch {}
       }
@@ -50,7 +50,7 @@ export class MultibotManager {
       return instance;
     } catch (error) {
       try { instance.destroy(); } catch {}
-      await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' });
+      try { await updateBot(this.ownerClient.db, botRecord.owner_id, id, { status: 'offline' }); } catch {}
       throw error;
     }
   }
@@ -69,21 +69,8 @@ export class MultibotManager {
     return true;
   }
 
-  async restart(botRecord) {
-    await this.stop(botRecord);
-    return this.start(botRecord);
-  }
-
-  get(id) { return this.instances.get(Number(id)) || null; }
-
-  async stopAndRemove(botRecord) {
-    await this.stop(botRecord);
-    await removeBot(this.ownerClient.db, botRecord.owner_id, botRecord.id);
-  }
-
-  async startAll() {
-    const bots = await listBots(this.ownerClient.db, '__all__');
-    return bots;
+  get(id) {
+    return this.instances.get(Number(id)) || null;
   }
 
   async shutdown() {

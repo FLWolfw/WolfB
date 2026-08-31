@@ -30,7 +30,6 @@ export class MultibotManager {
       return this.instances.get(id);
     }
     if (this.starting.has(id)) return this.starting.get(id);
-
     const promise = this.#startInternal(botRecord).finally(() => this.starting.delete(id));
     this.starting.set(id, promise);
     return promise;
@@ -88,16 +87,23 @@ export class MultibotManager {
       catch (error) { logger.error(`[multibot] Failed to set username for ${botRecord.id}: ${error?.message || error}`); }
     }
 
-    if (activityText) {
-      instance.user.setPresence({ status, activities: [{ name: activityText, type: activityType }] });
-    } else {
-      instance.user.setPresence({ status, activities: [] });
-    }
+    instance.user.setPresence(activityText
+      ? { status, activities: [{ name: activityText, type: activityType }] }
+      : { status, activities: [] });
 
     const avatarUrl = String(settings.avatarUrl || '').trim();
     if (avatarUrl && /^https?:\/\//i.test(avatarUrl)) {
       try { await instance.user.setAvatar(avatarUrl); }
       catch (error) { logger.error(`[multibot] Failed to set avatar for ${botRecord.id}: ${error?.message || error}`); }
+    }
+
+    const bannerUrl = String(settings.bannerUrl || '').trim();
+    if (bannerUrl && /^https?:\/\//i.test(bannerUrl)) {
+      try {
+        await instance.user.setBanner(bannerUrl);
+      } catch (error) {
+        logger.error(`[multibot] Failed to set banner for ${botRecord.id}: ${error?.message || error}`);
+      }
     }
 
     return true;

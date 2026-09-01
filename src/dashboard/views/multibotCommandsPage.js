@@ -8,6 +8,7 @@ const GENERAL_COMMANDS = [
   ['server', 'Muestra información del servidor actual.', '🏠'],
   ['user', 'Muestra información de un usuario.', '👤'],
   ['avatar', 'Muestra el avatar de un usuario.', '🖼️'],
+  ['voice', 'Conecta o desconecta el bot de un canal de voz.', '🔊'],
 ];
 
 const MODERATION_COMMANDS = [
@@ -47,7 +48,7 @@ export function renderMultibotCommands({ user, bot, csrf }) {
       <div class="row" style="margin-top:18px;flex-wrap:wrap"><button onclick="saveCommands()">${icon('check', 15)} Guardar comandos</button><a class="btn btn-ghost" href="/bots/${esc(bot.id)}">⚙️ Configuración</a><a class="btn btn-ghost" href="/bots">← Mis bots</a></div>
       <p id="msg" class="hint" style="min-height:20px;margin:12px 0 0"></p>
     </div>
-    <div class="card"><h2>💡 Cómo funciona</h2><p class="hint">Los comandos se registran directamente en la aplicación de Discord de <strong>${esc(displayName)}</strong>. Al desactivar uno, desaparece de los comandos disponibles de ese bot.</p><p class="hint">Cada instancia mantiene su propia configuración. Los comandos de Wolf-Bot y de tus otras instancias no se modifican.</p><p class="hint">🛡️ <strong>Seguridad:</strong> aunque un comando esté activado, Discord y el bot comprueban los permisos antes de ejecutar acciones de moderación.</p></div>
+    <div class="card"><h2>💡 Cómo funciona</h2><p class="hint">Los comandos se registran directamente en la aplicación de Discord de <strong>${esc(displayName)}</strong>. Al desactivar uno, desaparece de los comandos disponibles de ese bot.</p><p class="hint">Cada instancia mantiene su propia configuración. Los comandos de Wolf-Bot y de tus otras instancias no se modifican.</p><p class="hint">🔊 <strong>/voice</strong> usa una conexión de voz aislada por bot y servidor. <code>/voice join</code> te deja elegir el canal; <code>/voice leave</code> lo desconecta.</p><p class="hint">🛡️ <strong>Seguridad:</strong> los comandos de moderación siguen exigiendo los permisos correspondientes de Discord, y `/voice` comprueba que el bot pueda ver y conectarse al canal seleccionado.</p></div>
   </div>
   <style>
     .command-section{margin-top:18px}.command-section h3{font-size:14px;margin:0 0 9px}.section-hint{margin:-3px 0 10px;color:rgba(255,255,255,.5);font-size:12px}.command-list{display:flex;flex-direction:column;gap:8px}.command-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025);cursor:pointer}.command-info{display:flex;align-items:center;gap:13px;min-width:0}.command-icon{font-size:22px}.command-info strong{font-size:15px}.command-info p{margin:3px 0 0;color:rgba(255,255,255,.55);font-size:13px}.toggle{appearance:none;width:46px;height:25px;border-radius:999px;background:#30313d;position:relative;cursor:pointer;flex:0 0 auto}.toggle:after{content:'';position:absolute;width:19px;height:19px;top:3px;left:3px;border-radius:50%;background:#aaa;transition:.15s}.toggle:checked{background:#6f5cff}.toggle:checked:after{left:24px;background:white}

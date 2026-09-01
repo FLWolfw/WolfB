@@ -109,6 +109,7 @@ export function appShell({ title, user, active = '', flash, body }) {
     <div class="brand">${brandMark()}<span>${esc(BRAND)}</span></div>
     <nav class="nav">
       ${navItem('/dashboard', 'grid', 'Servidores', 'dashboard')}
+      ${navItem('/bots', 'users', 'Multibot', 'bots')}
       ${owner ? navItem('/admin', 'shield', 'Panel del dueño', 'admin') : ''}
       ${navItem('/invite', 'plus', 'Añadir a un servidor', 'invite')}
       ${SUPPORT ? `<a class="nav-link" href="${esc(SUPPORT)}" target="_blank" rel="noopener">${icon('link')}<span>Soporte</span></a>` : ''}

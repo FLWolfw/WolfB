@@ -124,6 +124,19 @@ async function handleVoiceCommand(manager, interaction, botRecord) {
     return interaction.reply({ content: '❌ `/voice` solo funciona dentro de un servidor.', ephemeral: true });
   }
 
+  // Discord only gives an interaction a few seconds for the initial response.
+  // Voice handshakes can take longer, so acknowledge immediately and edit later.
+  try {
+    await interaction.deferReply({ ephemeral: true });
+  } catch (error) {
+    logger.error(`[multibot] Failed to acknowledge /voice for ${botRecord?.id}: ${error?.message || error}`);
+    return;
+  }
+
+  const respond = content => interaction.editReply({ content }).catch(error => {
+    logger.error(`[multibot] Failed to send /voice response for ${botRecord?.id}: ${error?.message || error}`);
+  });
+
   const subcommand = interaction.options.getSubcommand();
   const instanceId = Number(botRecord.id);
   const guildId = interaction.guild.id;
@@ -131,21 +144,19 @@ async function handleVoiceCommand(manager, interaction, botRecord) {
 
   if (subcommand === 'leave') {
     const connection = manager.voiceConnections.get(key) || getVoiceConnection(guildId, `wolf-multibot-${instanceId}`);
-    if (!connection) {
-      return interaction.reply({ content: 'ℹ️ Este bot no está conectado a un canal de voz.', ephemeral: true });
-    }
+    if (!connection) return respond('ℹ️ Este bot no está conectado a un canal de voz.');
     connection.destroy();
     manager.voiceConnections.delete(key);
-    return interaction.reply({ content: '🔌 Me desconecté del canal de voz.', ephemeral: true });
+    return respond('🔌 Me desconecté del canal de voz.');
   }
 
   const channel = interaction.options.getChannel('channel');
   if (!channel?.isVoiceBased?.() || ![ChannelType.GuildVoice, ChannelType.GuildStageVoice].includes(channel.type)) {
-    return interaction.reply({ content: '❌ Debes seleccionar un canal de voz válido.', ephemeral: true });
+    return respond('❌ Debes seleccionar un canal de voz válido.');
   }
 
   const permissionCheck = botCanConnect(channel, interaction);
-  if (!permissionCheck.ok) return interaction.reply({ content: permissionCheck.message, ephemeral: true });
+  if (!permissionCheck.ok) return respond(permissionCheck.message);
 
   const existing = manager.voiceConnections.get(key) || getVoiceConnection(guildId, `wolf-multibot-${instanceId}`);
   if (existing) existing.destroy();
@@ -160,6 +171,9 @@ async function handleVoiceCommand(manager, interaction, botRecord) {
   });
 
   manager.voiceConnections.set(key, connection);
+  connection.on('error', error => {
+    logger.error(`[multibot] Voice connection error for instance ${instanceId} in guild ${guildId}: ${error?.message || error}`);
+  });
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     try {
       await entersState(connection, VoiceConnectionStatus.Signalling, 5_000);
@@ -170,13 +184,13 @@ async function handleVoiceCommand(manager, interaction, botRecord) {
   });
 
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
-    return interaction.reply({ content: `🔊 Me conecté a **${channel.name}**.`, ephemeral: true });
+    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+    return respond(`🔊 Me conecté a **${channel.name}**.`);
   } catch (error) {
     connection.destroy();
     if (manager.voiceConnections.get(key) === connection) manager.voiceConnections.delete(key);
     logger.error(`[multibot] Voice connection failed for instance ${instanceId} in guild ${guildId}: ${error?.message || error}`);
-    return interaction.reply({ content: '❌ No pude conectarme al canal de voz. Revisa los permisos del bot y vuelve a intentarlo.', ephemeral: true });
+    return respond('❌ No pude conectarme al canal de voz. Revisa los permisos del bot y vuelve a intentarlo.');
   }
 }
 

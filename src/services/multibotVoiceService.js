@@ -94,7 +94,8 @@ export function installMultibotVoiceCommands(manager) {
     const result = await originalHandle(interaction, botRecord);
     if (interaction.isChatInputCommand?.() && interaction.commandName === 'help' && interaction.replied && voiceEnabled(botRecord)) {
       try {
-        const embed = interaction.message?.embeds?.[0];
+        const reply = await interaction.fetchReply();
+        const embed = reply?.embeds?.[0];
         if (embed) {
           const description = `${embed.description || ''}\n**/voice** — Controla la conexión de voz de este bot.`;
           const next = EmbedBuilder.from(embed).setDescription(description.trim());

@@ -11,6 +11,7 @@ import { checkGiveaways } from './services/giveawayService.js';
 import { checkBirthdays } from './services/birthdayService.js';
 import { setupDashboard } from './dashboard/index.js';
 import { MultibotManager } from './services/multibotManager.js';
+import { installMultibotVoiceCommands } from './services/multibotVoiceService.js';
 
 export class TitanBot extends Client {
   constructor() {
@@ -35,6 +36,7 @@ export class TitanBot extends Client {
       this.db = databaseResult.db;
       startupLog(`Database ready — ${this.db.getConnectionType()}`);
       this.multibotManager = new MultibotManager(this);
+      installMultibotVoiceCommands(this.multibotManager);
       startupLog('Loading commands...');
       await loadCommands(this);
       this.startWebServer();

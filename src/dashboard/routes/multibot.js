@@ -1,84 +1,36 @@
 import express from 'express';
-import { listBots, addBot, removeBot, updateBot, ensureMultibotSchema } from '../../services/multibotService.js';
+import { listBots, addBot, removeBot, updateBot, ensureMultibotSchema, getBot } from '../../services/multibotService.js';
 import { ensureCsrfToken } from '../lib/csrf.js';
 import { requireLogin } from '../middleware/auth.js';
 import { renderMultibot } from '../views/multibotPage.js';
+import { renderMultibotConfig } from '../views/multibotConfigPage.js';
+import { renderMultibotCommands } from '../views/multibotCommandsPage.js';
 
-export function multibotRoutes(client) {
+export function multibotRoutes(client, manager) {
   const router = express.Router();
-  let schemaReady;
-
-  async function ensureSchema() {
-    if (!schemaReady) {
-      schemaReady = ensureMultibotSchema(client.db).catch((error) => {
-        schemaReady = null;
-        throw error;
-      });
-    }
-    return schemaReady;
+  let schemaPromise = null;
+  async function ensureSchema() { if (!schemaPromise) schemaPromise = ensureMultibotSchema(client.db).catch(error => { schemaPromise = null; throw error; }); await schemaPromise; }
+  function logRouteError(label, error) {
+    console.error(`[multibot] ${label} failed:`, error?.stack || error?.message || error);
   }
 
-  router.get('/bots', requireLogin, async (req, res) => {
-    try {
-      await ensureSchema();
-      const bots = await listBots(client.db, req.session.user.id);
-      res.send(renderMultibot({ user: req.session.user, bots, csrf: ensureCsrfToken(req) }));
-    } catch (error) {
-      console.error('[multibot] Failed to load bots:', error?.message || error);
-      res.status(500).send('Error cargando tus bots.');
-    }
-  });
+  router.get('/bots', requireLogin, async (req, res) => { try { await ensureSchema(); const bots = await listBots(client.db, req.session.user.id); res.send(renderMultibot({ user: req.session.user, bots, csrf: ensureCsrfToken(req) })); } catch (error) { logRouteError('GET /bots', error); res.status(500).send('Error cargando tus bots.'); } });
 
-  router.get('/api/multibot', requireLogin, async (req, res) => {
-    try {
-      await ensureSchema();
-      res.json({ bots: await listBots(client.db, req.session.user.id) });
-    } catch (error) {
-      console.error('[multibot] Failed to list bots:', error?.message || error);
-      res.status(500).json({ error: 'database_error' });
-    }
-  });
+  router.get('/bots/:id', requireLogin, async (req, res) => { try { await ensureSchema(); const bot = await getBot(client.db, req.session.user.id, req.params.id); if (!bot) return res.status(404).send('Bot no encontrado.'); res.send(renderMultibotConfig({ user: req.session.user, bot, csrf: ensureCsrfToken(req) })); } catch (error) { logRouteError(`GET /bots/${req.params.id}`, error); res.status(500).send('Error cargando la configuración del bot.'); } });
+
+  router.get('/bots/:id/commands', requireLogin, async (req, res) => { try { await ensureSchema(); const bot = await getBot(client.db, req.session.user.id, req.params.id); if (!bot) return res.status(404).send('Bot no encontrado.'); res.send(renderMultibotCommands({ user: req.session.user, bot, csrf: ensureCsrfToken(req) })); } catch (error) { logRouteError(`GET /bots/${req.params.id}/commands`, error); res.status(500).send('Error cargando los comandos.'); } });
+
+  router.get('/api/multibot', requireLogin, async (req, res) => { try { await ensureSchema(); res.json({ bots: await listBots(client.db, req.session.user.id) }); } catch (error) { logRouteError('GET /api/multibot', error); res.status(500).json({ error: 'database_error' }); } });
 
   router.post('/api/multibot', requireLogin, async (req, res) => {
-    const token = String(req.body?.token || '').trim();
-    if (!token) return res.status(400).json({ error: 'token_required' });
-    try {
-      await ensureSchema();
-      const response = await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bot ${token}` } });
-      if (!response.ok) return res.status(400).json({ error: 'invalid_bot_token' });
-      const user = await response.json();
-      if (!user.bot) return res.status(400).json({ error: 'not_a_bot_user' });
-      const bot = await addBot(client.db, { ownerId: req.session.user.id, botUserId: user.id, botUsername: user.username, token });
-      res.status(201).json({ bot });
-    } catch (error) {
-      if (error?.code === '23505') return res.status(409).json({ error: 'bot_already_added' });
-      console.error('[multibot] Failed to add bot:', error?.message || error);
-      res.status(500).json({ error: 'database_error' });
-    }
+    const token = String(req.body?.token || '').trim(); if (!token) return res.status(400).json({ error: 'token_required' });
+    try { await ensureSchema(); const response = await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bot ${token}` } }); if (!response.ok) return res.status(400).json({ error: 'invalid_bot_token' }); const user = await response.json(); if (!user.bot) return res.status(400).json({ error: 'not_a_bot_user' }); const bot = await addBot(client.db, { ownerId: req.session.user.id, botUserId: user.id, botUsername: user.username, token }); res.status(201).json({ bot }); }
+    catch (error) { logRouteError('POST /api/multibot', error); if (error?.code === '23505') return res.status(409).json({ error: 'bot_already_added' }); res.status(500).json({ error: 'database_error' }); }
   });
 
-  router.patch('/api/multibot/:id', requireLogin, async (req, res) => {
-    try {
-      await ensureSchema();
-      const settings = req.body?.settings && typeof req.body.settings === 'object' ? req.body.settings : {};
-      const bot = await updateBot(client.db, req.session.user.id, req.params.id, { settings });
-      if (!bot) return res.status(404).json({ error: 'not_found' });
-      res.json({ bot });
-    } catch (error) {
-      console.error('[multibot] Failed to update bot:', error?.message || error);
-      res.status(500).json({ error: 'database_error' });
-    }
-  });
-
-  router.delete('/api/multibot/:id', requireLogin, async (req, res) => {
-    try {
-      await ensureSchema();
-      res.json({ removed: await removeBot(client.db, req.session.user.id, req.params.id) });
-    } catch (error) {
-      console.error('[multibot] Failed to remove bot:', error?.message || error);
-      res.status(500).json({ error: 'database_error' });
-    }
-  });
-
+  router.post('/api/multibot/:id/start', requireLogin, async (req, res) => { try { await ensureSchema(); const bot = await getBot(client.db, req.session.user.id, req.params.id); if (!bot) return res.status(404).json({ error: 'not_found' }); await manager.start(bot); res.json({ ok: true, status: 'online' }); } catch (error) { logRouteError(`POST /api/multibot/${req.params.id}/start`, error); res.status(400).json({ error: 'start_failed', message: error?.message || 'No se pudo iniciar el bot.' }); } });
+  router.post('/api/multibot/:id/stop', requireLogin, async (req, res) => { try { await ensureSchema(); const bot = await getBot(client.db, req.session.user.id, req.params.id); if (!bot) return res.status(404).json({ error: 'not_found' }); await manager.stop(bot); res.json({ ok: true, status: 'offline' }); } catch (error) { logRouteError(`POST /api/multibot/${req.params.id}/stop`, error); res.status(500).json({ error: 'stop_failed' }); } });
+  router.patch('/api/multibot/:id', requireLogin, async (req, res) => { try { await ensureSchema(); const settings = req.body?.settings && typeof req.body.settings === 'object' ? req.body.settings : {}; const bot = await updateBot(client.db, req.session.user.id, req.params.id, { settings }); if (!bot) return res.status(404).json({ error: 'not_found' }); if (manager) { await manager.registerInstanceCommands(manager.get(req.params.id), bot).catch(error => logRouteError(`register commands ${req.params.id}`, error)); await manager.applySettings(bot).catch(error => logRouteError(`apply settings ${req.params.id}`, error)); } res.json({ bot }); } catch (error) { logRouteError('PATCH /api/multibot', error); res.status(500).json({ error: 'database_error' }); } });
+  router.delete('/api/multibot/:id', requireLogin, async (req, res) => { try { await ensureSchema(); const bot = await getBot(client.db, req.session.user.id, req.params.id); if (bot) await manager.stop(bot); res.json({ removed: await removeBot(client.db, req.session.user.id, req.params.id) }); } catch (error) { logRouteError(`DELETE /api/multibot/${req.params.id}`, error); res.status(500).json({ error: 'database_error' }); } });
   return router;
 }

@@ -24,16 +24,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  *  - all dynamic text is HTML-escaped in the views
  */
 export function setupDashboard(app, client) {
+  // Behind Railway/Heroku/etc. TLS is terminated at the proxy and the
+  // app is reached over HTTP. Without trusting the proxy, Express sees
+  // req.secure=false and express-session refuses to set the `secure`
+  // session cookie, so the OAuth state never persists between /login
+  // and /callback ("login inválido o expirado"). Trust the first proxy
+  // so X-Forwarded-Proto is honoured.
   app.set('trust proxy', 1);
+
   app.use(express.urlencoded({ extended: true, limit: '32kb' }));
-  app.use('/assets', express.static(path.join(__dirname, 'public'), { maxAge: '7d', etag: true }));
+
+  app.use(
+    '/assets',
+    express.static(path.join(__dirname, 'public'), {
+      maxAge: '7d',
+      etag: true,
+    }),
+  );
+
   app.use(createSessionMiddleware());
   app.use(securityHeaders);
   app.use(csrfProtection);
+
   app.use('/', authRoutes());
   app.use('/', antiSpamRoutes(client));
   app.use('/', pageRoutes(client));
   app.use('/', multibotRoutes(client, client.multibotManager));
   app.use('/api', apiRoutes(client));
-  logger.info('Wolf dashboard mounted with multibot support');
+
+  logger.info('Wolf dashboard mounted (/, /dashboard, /server/:id, /server/:id/antispam, /bots, /api)');
 }

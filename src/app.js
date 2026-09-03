@@ -12,6 +12,7 @@ import { checkBirthdays } from './services/birthdayService.js';
 import { setupDashboard } from './dashboard/index.js';
 import { MultibotManager } from './services/multibotManager.js';
 import { installMultibotVoiceCommands } from './services/multibotVoiceService.js';
+import { installMultibotVoicePersistence } from './services/multibotVoicePersistence.js';
 
 export class TitanBot extends Client {
   constructor() {
@@ -55,6 +56,7 @@ export class TitanBot extends Client {
 
       this.multibotManager = new MultibotManager(this);
       installMultibotVoiceCommands(this.multibotManager);
+      installMultibotVoicePersistence(this.multibotManager);
 
       startupLog('Loading commands...');
       await loadCommands(this);
@@ -75,6 +77,7 @@ export class TitanBot extends Client {
 
       this.setupCronJobs();
       await this.multibotManager.restoreOnlineBots().catch(error => logger.error(`[multibot] Failed to restore online bots: ${error?.message || error}`));
+      await this.multibotManager.restoreVoiceConnections().catch(error => logger.error(`[multibot] Failed to restore persistent voice connections: ${error?.message || error}`));
     } catch (error) {
       logger.error('Failed to start bot:', error);
       shutdownLog('Bot startup failed');
